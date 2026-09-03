@@ -1,0 +1,17 @@
+Doctor: What brings you in today?
+Patient: I've had a sore throat and a fever for about three days now.
+Doctor: Any cough or runny nose?
+Patient: A little bit of a dry cough, no runny nose really.
+Doctor: On a scale of one to ten, how bad is the throat pain?
+Patient: Maybe a six. It hurts more when I swallow.
+Doctor: Let me take a look. Okay, I can see your tonsils are swollen and there's some white patches on them.
+Doctor: Your temperature right now is 100.9 Fahrenheit.
+Doctor: I'm going to feel your neck. Yes, the lymph nodes here are a bit swollen and tender.
+Patient: Is it strep throat?
+Doctor: It looks consistent with strep throat, but I want to do a rapid strep test to confirm.
+Doctor: The test came back positive for strep throat.
+Doctor: I'm going to prescribe amoxicillin, 500 milligrams, twice a day for ten days.
+Doctor: Take it with food if it upsets your stomach. Drink plenty of fluids and rest.
+Patient: Any allergies I should know about before I take this?
+Doctor: You mentioned no drug allergies on your intake form, so we should be fine.
+Doctor: Come back if the fever isn't gone in 48 hours or if you have trouble breathing.
