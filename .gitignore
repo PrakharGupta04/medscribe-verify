@@ -10,23 +10,33 @@ __pycache__/
 .venv/
 venv/
 .medscribe/
-scratch/
 
-# Test audio and scratch scripts
-*.wav
-*.vbs
-
-# SQLite database
+# SQLite database & journals
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.sqlite3-journal
 
 # Logs
 *.log
 
+# Audio files & temporary test media
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.ogg
+gen_*.vbs
+
+# Scratch & temporary test scripts
+scratch/
+
 # Frontend dependencies and build output
 Frontend/node_modules/
 Frontend/dist/
+Frontend/.dist/
 
 # IDE/system files
 .vscode/

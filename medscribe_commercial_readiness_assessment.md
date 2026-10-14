@@ -293,81 +293,81 @@ pie title Gap Analysis: What's Missing for Commercial Readiness
 > [!TIP]
 > Complete this before anything else. It costs almost nothing and prevents regressions.
 
-| Task | File(s) | Acceptance Criteria | Definition of Done |
-|:---|:---|:---|:---|
-| **0.1** Initialize Git | Root | `git log` shows initial commit | All current working code is safeguarded |
-| **0.2** Add 429 retry to normalization | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py) | `pytest backend/tests` → 41/41 pass in single batch | Rate-limited translation retries before falling back |
-| **0.3** Fix age calculation | [summary_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py#L175) | Any DOB renders correct current age | Dynamic date math replaces hardcoded check |
-| **0.4** Add failure signal to normalization | normalization_service.py | Doctor-facing UI shows ⚠️ when translation was skipped | Return metadata indicating fallback was used |
-| **0.5** Remove deprecated stubs | [stubs.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/stubs.py) | No 501 routes remain | Clean API surface |
+| Task | File(s) | Acceptance Criteria | Definition of Done | Status |
+|:---|:---|:---|:---|:---:|
+| **0.1** Initialize Git | Root | `git log` shows initial commit | All current working code is safeguarded | ✅ **Completed** |
+| **0.2** Add 429 retry to normalization | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py) | `pytest backend/tests` → 41/41 pass in single batch | Rate-limited translation retries before falling back | ⏳ Pending |
+| **0.3** Fix age calculation | [summary_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py#L175) | Any DOB renders correct current age | Dynamic date math replaces hardcoded check | ⏳ Pending |
+| **0.4** Add failure signal to normalization | normalization_service.py | Doctor-facing UI shows ⚠️ when translation was skipped | Return metadata indicating fallback was used | ⏳ Pending |
+| **0.5** Remove deprecated stubs | [stubs.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/stubs.py) | No 501 routes remain | Clean API surface | ⏳ Pending |
 
 ---
 
 ### Phase 1: Security Foundation (Weeks 2–3)
 
-| Task | Acceptance Criteria |
-|:---|:---|
-| **1.1** Implement JWT auth with FastAPI OAuth2PasswordBearer | `POST /api/auth/login` returns JWT; protected routes return 401 without valid token |
-| **1.2** Add role-based authorization (doctor, admin) | Doctor can only access own patients; admin has full access |
-| **1.3** Replace frontend mock login | DoctorLogin.tsx calls real auth endpoint; stores JWT in httpOnly cookie |
-| **1.4** Add audit logging table | Every API mutation logs `(who, what, when, consultation_id)` to `audit_log` table |
-| **1.5** Add basic input sanitization middleware | HTML/script injection in transcript, notes, and patient fields is stripped |
+| Task | Acceptance Criteria | Status |
+|:---|:---|:---:|
+| **1.1** Implement JWT auth with FastAPI OAuth2PasswordBearer | `POST /api/auth/login` returns JWT; protected routes return 401 without valid token | ⏳ Pending |
+| **1.2** Add role-based authorization (doctor, admin) | Doctor can only access own patients; admin has full access | ⏳ Pending |
+| **1.3** Replace frontend mock login | DoctorLogin.tsx calls real auth endpoint; stores JWT in httpOnly cookie | ⏳ Pending |
+| **1.4** Add audit logging table | Every API mutation logs `(who, what, when, consultation_id)` to `audit_log` table | ⏳ Pending |
+| **1.5** Add basic input sanitization middleware | HTML/script injection in transcript, notes, and patient fields is stripped | ⏳ Pending |
 
 ---
 
 ### Phase 2: Module 3 Backend (Weeks 4–5)
 
-| Task | Acceptance Criteria |
-|:---|:---|
-| **2.1** Create `LongitudinalFact` database model | Table with: `patient_id`, `category` (allergy/condition/medication), `value`, `status` (active/resolved/chronic), `provenance`, `first_documented_visit_id`, `last_updated_visit_id` |
-| **2.2** Build reconciliation service | On finalization, new confirmed facts merge into longitudinal registry; resolved symptoms update status |
-| **2.3** Expose `GET /api/patients/{id}/longitudinal` | Returns full longitudinal history with source visit links |
-| **2.4** Re-wire frontend to real backend data | Replace `useMemo()` aggregation with API call; show source visit ID per fact |
-| **2.5** Write multi-visit E2E test | Visit 1: fever + penicillin allergy → Visit 2: rash, confirms allergy → Verify: allergy=active, fever=resolved/unmentioned |
+| Task | Acceptance Criteria | Status |
+|:---|:---|:---:|
+| **2.1** Create `LongitudinalFact` database model | Table with: `patient_id`, `category` (allergy/condition/medication), `value`, `status` (active/resolved/chronic), `provenance`, `first_documented_visit_id`, `last_updated_visit_id` | ⏳ Pending |
+| **2.2** Build reconciliation service | On finalization, new confirmed facts merge into longitudinal registry; resolved symptoms update status | ⏳ Pending |
+| **2.3** Expose `GET /api/patients/{id}/longitudinal` | Returns full longitudinal history with source visit links | ⏳ Pending |
+| **2.4** Re-wire frontend to real backend data | Replace `useMemo()` aggregation with API call; show source visit ID per fact | ⏳ Pending |
+| **2.5** Write multi-visit E2E test | Visit 1: fever + penicillin allergy → Visit 2: rash, confirms allergy → Verify: allergy=active, fever=resolved/unmentioned | ⏳ Pending |
 
 ---
 
 ### Phase 3: Reliability & Pipeline Orchestration (Week 6)
 
-| Task | Acceptance Criteria |
-|:---|:---|
-| **3.1** Add `POST /api/consultations/{id}/run-pipeline` | Single endpoint executes Extract → SOAP → Verify → Compare with transactional safety |
-| **3.2** Add "Analyze Consultation" single-click button | Doctor clicks once; all 4 stages run; progress indicator shows each stage |
-| **3.3** Improve health endpoint | `/api/health` checks DB connectivity and Groq API reachability |
-| **3.4** Add circuit breaker for Groq API | After 3 consecutive failures, disable LLM features and show manual-only mode |
+| Task | Acceptance Criteria | Status |
+|:---|:---|:---:|
+| **3.1** Add `POST /api/consultations/{id}/run-pipeline` | Single endpoint executes Extract → SOAP → Verify → Compare with transactional safety | ⏳ Pending |
+| **3.2** Add "Analyze Consultation" single-click button | Doctor clicks once; all 4 stages run; progress indicator shows each stage | ⏳ Pending |
+| **3.3** Improve health endpoint | `/api/health` checks DB connectivity and Groq API reachability | ⏳ Pending |
+| **3.4** Add circuit breaker for Groq API | After 3 consecutive failures, disable LLM features and show manual-only mode | ⏳ Pending |
 
 ---
 
 ### Phase 4: Deployment Infrastructure (Weeks 7–8)
 
-| Task | Acceptance Criteria |
-|:---|:---|
-| **4.1** Create Dockerfile and docker-compose.yml | `docker-compose up` starts backend + frontend + PostgreSQL |
-| **4.2** Migrate SQLite → PostgreSQL | All tests pass against PostgreSQL; Alembic migration scripts created |
-| **4.3** Add HTTPS/TLS | All traffic encrypted; CORS restricted to known origins |
-| **4.4** Set up basic monitoring | Structured JSON logging; error rate tracking; response time metrics |
+| Task | Acceptance Criteria | Status |
+|:---|:---|:---:|
+| **4.1** Create Dockerfile and docker-compose.yml | `docker-compose up` starts backend + frontend + PostgreSQL | ⏳ Pending |
+| **4.2** Migrate SQLite → PostgreSQL | All tests pass against PostgreSQL; Alembic migration scripts created | ⏳ Pending |
+| **4.3** Add HTTPS/TLS | All traffic encrypted; CORS restricted to known origins | ⏳ Pending |
+| **4.4** Set up basic monitoring | Structured JSON logging; error rate tracking; response time metrics | ⏳ Pending |
 
 ---
 
 ### Phase 5: Clinical Validation (Weeks 9–12)
 
-| Task | Acceptance Criteria |
-|:---|:---|
-| **5.1** Create gold-standard test corpus | 20+ real/realistic consultation transcripts with clinician-annotated extractions |
-| **5.2** Measure extraction accuracy | Precision, recall, F1 for symptoms, medications, allergies, diagnoses |
-| **5.3** Measure verification accuracy | False positive/negative rates for supported/unsupported claims |
-| **5.4** Clinician usability study | 3+ doctors use the system; collect NPS, task completion time, error reports |
+| Task | Acceptance Criteria | Status |
+|:---|:---|:---:|
+| **5.1** Create gold-standard test corpus | 20+ real/realistic consultation transcripts with clinician-annotated extractions | ⏳ Pending |
+| **5.2** Measure extraction accuracy | Precision, recall, F1 for symptoms, medications, allergies, diagnoses | ⏳ Pending |
+| **5.3** Measure verification accuracy | False positive/negative rates for supported/unsupported claims | ⏳ Pending |
+| **5.4** Clinician usability study | 3+ doctors use the system; collect NPS, task completion time, error reports | ⏳ Pending |
 
 ---
 
 ### Phase 6: Interoperability & Advanced Features (Weeks 13+)
 
-| Task | Acceptance Criteria |
-|:---|:---|
-| **6.1** Add FHIR Patient/Encounter/Observation resources | Export consultation as FHIR Bundle |
-| **6.2** Add ICD-10 coding suggestions | Extracted diagnoses map to ICD-10 codes (doctor confirms) |
-| **6.3** Add structured medication coding | Medications map to RxNorm or equivalent |
-| **6.4** EHR integration prototype | Push finalized records to a test EHR system |
+| Task | Acceptance Criteria | Status |
+|:---|:---|:---:|
+| **6.1** Add FHIR Patient/Encounter/Observation resources | Export consultation as FHIR Bundle | ⏳ Pending |
+| **6.2** Add ICD-10 coding suggestions | Extracted diagnoses map to ICD-10 codes (doctor confirms) | ⏳ Pending |
+| **6.3** Add structured medication coding | Medications map to RxNorm or equivalent | ⏳ Pending |
+| **6.4** EHR integration prototype | Push finalized records to a test EHR system | ⏳ Pending |
 
 ---
 
@@ -464,4 +464,41 @@ The path forward is clear: stabilize → secure → complete Module 3 → deploy
 
 ---
 
-*Assessment complete. All findings verified against current source code. No files modified.*
+*Assessment baseline complete. Development phase tracking active below.*
+
+---
+
+## 13. DEVELOPMENT ROADMAP PROGRESS & IMPLEMENTATION LOG
+
+### Phase 0: Foundation Stabilization — Execution Log
+
+| Milestone / Task | Status | Completion Date | Evidence / Artifacts |
+|:---|:---:|:---:|:---|
+| **0.1 Initialize Git & Project Repo** | ✅ **COMPLETED** | Oct 14, 2026 | Git repository initialized, `.gitignore` configured, comprehensive `README.md` added, remote connected to `https://github.com/PrakharGupta04/medscribe-verify` |
+| **0.2 Add 429 Retry to Normalization** | ⏳ Pending | Next | `backend/app/services/normalization_service.py` |
+| **0.3 Fix Age Calculation** | ⏳ Pending | Next | `backend/app/services/summary_service.py` |
+| **0.4 Add Failure Signal to Normalization** | ⏳ Pending | Next | `normalization_service.py` metadata & UI notification |
+| **0.5 Remove Deprecated Stubs** | ⏳ Pending | Next | `stubs.py` decommission & route unbinding |
+
+#### Summary of Actions Completed for Phase 0.1:
+1. **Repository Setup & Version Control Safeguard**:
+   - Initialized local Git repository tracking all production code, schemas, services, tests, and configuration.
+   - Bound remote repository: `origin` pointing to `https://github.com/PrakharGupta04/medscribe-verify.git`.
+2. **Environment & Artifact Protection (`.gitignore`)**:
+   - Explicitly excluded all secrets and keys (`.env`, `.env.*`) while whitelisting `.env.example`.
+   - Prevented accidental commit of virtual environment files (`.medscribe/`, `.venv/`, `venv/`).
+   - Prevented commit of local SQLite databases and lock/WAL files (`*.db`, `*.sqlite`, `*.sqlite3`, `*.db-wal`, `*.db-shm`).
+   - Ignored large audio recordings (`*.wav`, `*.mp3`, `*.m4a`) and test generation scripts (`gen_*.vbs`).
+   - Excluded `Frontend/node_modules/` and build directories (`dist/`).
+   - Excluded temporary scratch scripts (`scratch/`).
+3. **Commit-Ready Documentation (`README.md`)**:
+   - Formatted and generated the main project `README.md` documenting:
+     - The overarching vision and doctor-supervised clinical philosophy.
+     - Architecture breakdown for Modules 1, 2, and 3.
+     - Clinical safety invariants (sentinel values, 4-tier provenance tracking, claim verification engine, doctor approval gate, visit isolation).
+     - Step-by-step setup and running instructions for both FastAPI backend and React frontend.
+     - Test suite execution instructions (`pytest backend/tests`).
+     - Direct linkage to this commercial readiness assessment.
+4. **Safety & Stability Audit**:
+   - Verified that `stubs.py` and existing route imports remain functional until task 0.5 is deliberately executed.
+   - Verified that all clinical tests remain runnable and intact.
