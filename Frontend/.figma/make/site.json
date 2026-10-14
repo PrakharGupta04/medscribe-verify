@@ -1,0 +1,10 @@
+{
+  "description": "Streamlines clinical workflows by enabling adaptive patient intake, AI-assisted consultation notes, and verified longitudinal patient records for doctors.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
