@@ -185,3 +185,86 @@ def test_voice_transcription_endpoint(client: TestClient):
     )
     assert res.status_code == 200
     assert "text" in res.json()
+
+
+def test_calculate_age_dynamic():
+    from datetime import datetime
+    from backend.app.services.summary_service import calculate_age
+
+    today = datetime.now().date()
+    # 25 years ago
+    dob_25 = f"{today.year - 25}-{today.month:02d}-{today.day:02d}"
+    assert calculate_age(dob_25) == "25"
+
+    # Year-only format
+    dob_year = f"{today.year - 40}"
+    assert calculate_age(dob_year) == "40"
+
+    # Alternative date format DD/MM/YYYY
+    dob_slash = f"{today.day:02d}/{today.month:02d}/{today.year - 15}"
+    assert calculate_age(dob_slash) == "15"
+
+    # Edge cases
+    assert calculate_age("") == "—"
+    assert calculate_age(None) == "—"
+    assert calculate_age("—") == "—"
+    assert calculate_age("invalid-date") == "—"
+
+
+def test_deprecated_stubs_removed(client: TestClient):
+    # Verify that deprecated 501 stubs are removed and return 404
+    r1 = client.post("/api/consultation/transcript")
+    assert r1.status_code == 404
+
+    r2 = client.get("/api/verification/claims/consultation-123")
+    assert r2.status_code == 404
+
+    r3 = client.post("/api/records/visit-123/approve")
+    assert r3.status_code == 404
+
+
+def test_normalization_fallback_signal(client: TestClient, monkeypatch):
+    from backend.app.services import normalization_service
+
+    # Force normalization failure on Groq to simulate offline / rate-limited Groq
+    original_post = normalization_service.httpx.Client.post
+
+    def fake_post(self, url, *args, **kwargs):
+        if "groq.com" in str(url):
+            raise RuntimeError("Network offline simulated")
+        return original_post(self, url, *args, **kwargs)
+
+    monkeypatch.setattr(normalization_service.httpx.Client, "post", fake_post)
+
+    text, fallback = normalization_service.normalize_to_clinical_english_with_status("मुझे तेज बुखार है")
+    assert fallback is True
+    assert text == "मुझे तेज बुखार है"
+
+    # Verify doctor summary carries translation warning
+    s_res = client.post("/api/intake/sessions")
+    token = s_res.json()["session_token"]
+
+    payload = {
+        "name": "Fallback Patient",
+        "dob": "1991-05-10",
+        "phone": "9876540199",
+        "selected_complaints": ["Fever"],
+        "duration": "2 days",
+        "severity": 6,
+        "additional_symptoms": [],
+        "adaptive_answers": {},
+        "conditions": ["None of the above"],
+        "medications": "दवाई",
+        "allergies": "None",
+        "additional_notes": "None",
+    }
+    sub_res = client.post(f"/api/intake/sessions/{token}/submit", json=payload)
+    assert sub_res.status_code == 200
+    queue_id = sub_res.json()["queue_entry_id"]
+
+    doc_res = client.get(f"/api/doctor/intake/{queue_id}")
+    assert doc_res.status_code == 200
+    summary = doc_res.json()["summary"]
+    assert summary["translation_fallback"] is True
+    assert summary["translation_warning"] is not None
+    assert "Translation to English was skipped" in summary["translation_warning"]

@@ -527,6 +527,13 @@ function SummaryTab({
         </div>
       )}
 
+      {summary.translation_warning && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
+          <span className="text-base">⚠️</span>
+          <span><strong>Language Notice:</strong> {summary.translation_warning}</span>
+        </div>
+      )}
+
       <div className="space-y-3">
         <Expandable title="Chief Complaint" defaultOpen>
           <p className="text-sm text-slate-700">{summary.chief_complaint}</p>

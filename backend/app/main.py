@@ -8,7 +8,6 @@ from backend.app.api.routes.queue import router as queue_router
 from backend.app.api.routes.doctor import router as doctor_router
 from backend.app.api.routes.demo import router as demo_router
 from backend.app.api.routes.consultations import router as consultations_router
-from backend.app.api.routes.stubs import router as stubs_router
 from backend.app.core.config import settings
 from backend.app.db.base import Base
 from backend.app.db.session import engine
@@ -78,7 +77,6 @@ app.include_router(queue_router, prefix=settings.API_V1_STR)
 app.include_router(doctor_router, prefix=settings.API_V1_STR)
 app.include_router(demo_router, prefix=settings.API_V1_STR)
 app.include_router(consultations_router, prefix=settings.API_V1_STR)
-app.include_router(stubs_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

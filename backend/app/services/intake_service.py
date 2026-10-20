@@ -16,7 +16,10 @@ from backend.app.schemas.intake import (
     IntakeSubmitSummary,
     SessionCreateResponse,
 )
-from backend.app.services.normalization_service import normalize_to_clinical_english
+from backend.app.services.normalization_service import (
+    normalize_to_clinical_english,
+    normalize_to_clinical_english_with_status,
+)
 
 
 def utc_now() -> datetime:
@@ -177,14 +180,17 @@ def submit_intake(
     all_symptoms = list(req.selected_complaints) + list(req.additional_symptoms)
 
     # Normalize patient free-text input to clean clinical English
-    clean_medications = normalize_to_clinical_english(req.medications)
-    clean_allergies = normalize_to_clinical_english(req.allergies)
-    clean_notes = normalize_to_clinical_english(req.additional_notes)
+    clean_medications, med_fb = normalize_to_clinical_english_with_status(req.medications)
+    clean_allergies, all_fb = normalize_to_clinical_english_with_status(req.allergies)
+    clean_notes, note_fb = normalize_to_clinical_english_with_status(req.additional_notes)
+    any_normalization_fallback = med_fb or all_fb or note_fb
 
     # Preserve raw adaptive answers and structured condition details in adaptive_responses JSON
     adaptive_payload = dict(req.adaptive_answers)
     if req.condition_details:
         adaptive_payload["__condition_details__"] = req.condition_details
+    if any_normalization_fallback:
+        adaptive_payload["__normalization_fallback__"] = True
 
     intake_data = IntakeData(
         session_id=session.id,

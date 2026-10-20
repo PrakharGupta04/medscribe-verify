@@ -123,6 +123,8 @@ export interface PreConsultationSummary {
   submitted_at: string;
   provenance: string;
   clinical_notice: string;
+  translation_fallback?: boolean;
+  translation_warning?: string | null;
 }
 
 export interface DoctorIntakeSummaryResponse {

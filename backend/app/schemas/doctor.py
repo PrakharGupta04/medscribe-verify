@@ -29,6 +29,8 @@ class PreConsultationSummary(BaseModel):
     submitted_at: str
     provenance: str = "patient-reported"
     clinical_notice: str
+    translation_fallback: bool = False
+    translation_warning: Optional[str] = None
 
 
 class DoctorIntakeSummaryResponse(BaseModel):
