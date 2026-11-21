@@ -7,12 +7,12 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 function getDoctorInitials(name: string): string {
-  if (!name.trim()) return 'DR';
+  if (!name || !name.trim()) return '';
   const words = name.trim().split(/\s+/).filter(Boolean);
   const filtered = words.filter(w => !/^dr\.?$/i.test(w));
   const targetWords = filtered.length > 0 ? filtered : words;
   const initials = targetWords.slice(0, 2).map(w => w[0].toUpperCase()).join('');
-  return initials || 'DR';
+  return initials || '';
 }
 
 interface DoctorLayoutProps {
@@ -29,7 +29,7 @@ export default function DoctorLayout({ children, activeNav, doctorName, onNav, o
   return (
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-white border-r border-slate-100 flex flex-col">
+      <aside className="sticky top-0 h-screen w-56 flex-shrink-0 bg-white border-r border-slate-100 flex flex-col">
         <div className="p-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -71,7 +71,7 @@ export default function DoctorLayout({ children, activeNav, doctorName, onNav, o
             </div>
             <div className="overflow-hidden">
               <div className="text-xs font-medium text-slate-800 truncate" title={doctorName}>
-                {doctorName || 'Attending Physician'}
+                {doctorName}
               </div>
             </div>
           </div>

@@ -45,7 +45,7 @@ export default function DoctorLogin({ onLogin }: DoctorLoginProps) {
         </div>
         <div className="space-y-3">
           {[
-            { icon: '🔒', text: 'Demo build — simulated sign-in' },
+            { icon: 'ℹ️', text: 'Demo build — simulated sign-in' },
             { icon: '✓', text: 'AI output is always doctor-reviewed' },
             { icon: '📋', text: 'Source-aware patient records' },
           ].map(item => (

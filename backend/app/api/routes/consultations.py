@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,8 @@ from backend.app.schemas.consultation import (
     SoapDraftUpdateRequest,
     FinalizeConsultationRequest,
     ResolveDiscrepancyRequest,
+    PipelineResponse,
+    RunPipelineRequest,
 )
 from backend.app.services import consultation_service
 
@@ -204,5 +206,27 @@ def finalize_consultation(
         plan=payload.plan,
         doctor_notes=payload.doctor_notes,
         doctor_name=payload.doctor_name,
+    )
+
+
+@router.post("/{consultation_id}/run-pipeline", response_model=PipelineResponse, status_code=status.HTTP_200_OK)
+def run_pipeline(
+    consultation_id: str,
+    payload: Optional[RunPipelineRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Executes the complete consultation intelligence pipeline in one call:
+    1. Clinical Extraction (Agent 1)
+    2. SOAP Draft Generation (Agent 2)
+    3. SOAP Verification (Agent 3)
+    4. Intake vs Consultation Comparison (Agent 4)
+    Preserves doctor-edited drafts by default.
+    """
+    preserve = payload.preserve_doctor_edits if payload is not None and payload.preserve_doctor_edits is not None else True
+    return consultation_service.run_pipeline(
+        db=db,
+        consultation_id=consultation_id,
+        preserve_doctor_edits=preserve,
     )
 

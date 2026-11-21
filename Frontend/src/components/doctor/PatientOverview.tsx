@@ -3,7 +3,13 @@ import {
   Tabs, Card, SectionLabel, SourceBadge, VerifBadge, AINotice, Button, AllergyTag, Expandable, VoiceButton
 } from '../ui';
 import { api } from '../../services/api';
-import type { DoctorIntakeSummaryResponse, PreConsultationSummary, PatientDemographics, ConsultationResponse } from '../../types/intake';
+import type {
+  DoctorIntakeSummaryResponse,
+  PreConsultationSummary,
+  PatientDemographics,
+  ConsultationResponse,
+  PipelineStageResult,
+} from '../../types/intake';
 
 type TabId = 'summary' | 'history' | 'transcript' | 'soap' | 'verification' | 'record';
 
@@ -912,6 +918,11 @@ function TranscriptTab({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState(false);
   const [speakerRole, setSpeakerRole] = useState<'doctor' | 'patient' | 'unlabeled'>('doctor');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageResult[] | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisSuccess, setAnalysisSuccess] = useState(false);
 
   // Sync state with real consultation transcript when loaded or changed
   useEffect(() => {
@@ -919,6 +930,28 @@ function TranscriptTab({
       setText(consultation.transcript);
     }
   }, [consultation?.id, consultation?.transcript]);
+
+  // Elapsed timer during analysis execution
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    if (analyzing) {
+      const start = Date.now();
+      setElapsedSeconds(0);
+      timer = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
+      }, 500);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [analyzing]);
+
+  const isFinalized = Boolean(
+    consultation?.final_record ||
+    consultation?.finalized_at ||
+    consultation?.status === 'completed' ||
+    consultation?.status === 'finalized'
+  );
 
   const handleVoiceTranscribe = (newSpeech: string) => {
     if (!newSpeech || !newSpeech.trim()) return;
@@ -1022,8 +1055,74 @@ function TranscriptTab({
     }
   };
 
+  const handleAnalyze = async () => {
+    if (analyzing || saving || extracting) return;
+    if (!consultation?.id) {
+      setAnalysisError('No active consultation session found. Please select a patient.');
+      return;
+    }
+
+    if (!text.trim()) {
+      setAnalysisError('Transcript is empty. Please enter, paste, or record a transcript first before analyzing.');
+      return;
+    }
+
+    if (isFinalized) {
+      setAnalysisError('Cannot analyze a finalized consultation.');
+      return;
+    }
+
+    try {
+      setAnalyzing(true);
+      setAnalysisError(null);
+      setAnalysisSuccess(false);
+
+      // 2. Save pending transcript changes before starting analysis
+      if (hasUnsavedChanges) {
+        await handleSave();
+      }
+
+      // 3. Call api.runPipeline with consultation ID and preserveDoctorEdits=true
+      const response = await api.runPipeline(consultation.id, true);
+
+      // 5. Display returned stage statuses
+      setPipelineStages(response.stages);
+
+      // 6. Update consultation using response returned by backend
+      if (onConsultationUpdated && response.consultation) {
+        onConsultationUpdated(response.consultation);
+      }
+
+      // 7. Handle failed and skipped stages correctly
+      const hasFailures = response.stages.some(s => s.status === 'failed');
+      if (!response.completed || hasFailures) {
+        const failedStage = response.stages.find(s => s.status === 'failed');
+        const detail = failedStage?.detail || 'One or more pipeline stages failed.';
+        setAnalysisError(`Pipeline partially failed at stage "${failedStage?.name || 'unknown'}": ${detail}`);
+        // Do NOT call onProcessed
+      } else {
+        setAnalysisSuccess(true);
+        // 10. Call onProcessed only when the pipeline has actually completed successfully
+        onProcessed();
+      }
+    } catch (err: unknown) {
+      // 8. Show a meaningful error if the API call fails
+      const message = err instanceof Error ? err.message : 'Consultation analysis failed';
+      setAnalysisError(message);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const hasUnsavedChanges = consultation ? (consultation.transcript || '') !== text : Boolean(text);
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const isAnalyzeDisabled =
+    analyzing ||
+    saving ||
+    extracting ||
+    !consultation?.id ||
+    !text.trim() ||
+    isFinalized;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -1179,14 +1278,29 @@ function TranscriptTab({
           <div className="flex items-center gap-2">
             <Button
               onClick={handleSave}
-              disabled={saving || !consultation}
+              disabled={saving || analyzing || !consultation || isFinalized}
               size="sm"
             >
               {saving ? 'Saving to Database…' : '💾 Save Transcript'}
             </Button>
             <Button
+              onClick={handleAnalyze}
+              disabled={isAnalyzeDisabled}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+            >
+              {analyzing ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Analyzing Consultation ({elapsedSeconds}s)…
+                </span>
+              ) : (
+                '🚀 Analyze Consultation'
+              )}
+            </Button>
+            <Button
               onClick={handleExtract}
-              disabled={extracting || !text.trim() || !consultation}
+              disabled={extracting || analyzing || saving || !text.trim() || !consultation || isFinalized}
               size="sm"
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
@@ -1204,7 +1318,7 @@ function TranscriptTab({
                 variant="ghost"
                 size="sm"
                 onClick={handleClear}
-                disabled={saving || extracting}
+                disabled={saving || extracting || analyzing || isFinalized}
               >
                 Clear
               </Button>
@@ -1218,6 +1332,108 @@ function TranscriptTab({
           </div>
         </div>
       </div>
+
+      {/* Analysis error notification with retry */}
+      {analysisError && (
+        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">⚠</span>
+            <span>{analysisError}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              disabled={isAnalyzeDisabled}
+              className="px-2.5 py-1 bg-red-600 text-white font-medium text-xs rounded-lg hover:bg-red-700 transition cursor-pointer disabled:opacity-50"
+            >
+              ↻ Retry Analysis
+            </button>
+            <button
+              type="button"
+              onClick={() => setAnalysisError(null)}
+              className="text-red-500 hover:text-red-800 font-bold ml-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Analysis success notification */}
+      {analysisSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
+          <span>✓</span>
+          <span>Consultation analysis complete: Clinical facts extracted, SOAP draft generated, claims verified, and intake compared.</span>
+        </div>
+      )}
+
+      {/* Dynamic Pipeline Stages Status Banner */}
+      {pipelineStages && pipelineStages.length > 0 && (
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800 font-mono-label uppercase tracking-wide">
+                Pipeline Execution Status
+              </span>
+              {analyzing ? (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                  Running ({elapsedSeconds}s)
+                </span>
+              ) : pipelineStages.every(s => s.status === 'completed' || s.status === 'skipped') ? (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Completed
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                  Attention Needed
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPipelineStages(null)}
+              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+            {pipelineStages.map((stage, idx) => {
+              const isCompleted = stage.status === 'completed';
+              const isFailed = stage.status === 'failed';
+              return (
+                <div
+                  key={idx}
+                  className={`p-2.5 rounded-lg border text-xs transition-colors ${
+                    isCompleted
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                      : isFailed
+                      ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+                      : 'bg-amber-50/70 border-amber-200 text-amber-950'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className="capitalize">{stage.name.replace(/_/g, ' ')}</span>
+                    <span className="text-[11px]">
+                      {isCompleted ? '✓' : isFailed ? '✕' : '↷'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] mt-1 opacity-80">
+                    Status: <span className="font-medium capitalize">{stage.status}</span>
+                    {stage.duration_ms > 0 && ` (${Math.round(stage.duration_ms)}ms)`}
+                  </div>
+                  {stage.detail && (
+                    <div className="text-[10px] mt-1 truncate" title={stage.detail}>
+                      {stage.detail}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Extraction error notification */}
       {extractError && (

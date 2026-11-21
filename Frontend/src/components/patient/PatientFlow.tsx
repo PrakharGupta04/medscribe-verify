@@ -509,7 +509,7 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
               <Button onClick={handleStep1Next}>{t.continueBtn}</Button>
             </div>
             <p className="text-xs text-slate-400 mt-4 flex items-center gap-1.5">
-              <span>🔒</span> {t.privateEncrypted}
+              <span>ℹ️</span> {t.privateEncrypted}
             </p>
           </Card>
         )}
@@ -848,7 +848,7 @@ function WelcomeScreen({
           </Button>
 
           <p className="text-xs text-slate-400 mt-4 flex items-center justify-center gap-1.5">
-            <span>🔒</span> {t.privateNote}
+            <span>ℹ️</span> {t.privateNote}
           </p>
 
           <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-3">

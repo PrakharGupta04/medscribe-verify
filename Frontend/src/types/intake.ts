@@ -281,3 +281,20 @@ export interface ConsultationCreateRequest {
   force_new?: boolean;
 }
 
+export interface PipelineStageResult {
+  name: string;
+  status: 'completed' | 'failed' | 'skipped';
+  detail?: string | null;
+  duration_ms: number;
+}
+
+export interface PipelineRunResponse {
+  completed: boolean;
+  stages: PipelineStageResult[];
+  consultation: ConsultationResponse;
+}
+
+export interface RunPipelineRequest {
+  preserve_doctor_edits?: boolean;
+}
+

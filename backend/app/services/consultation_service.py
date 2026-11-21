@@ -407,6 +407,38 @@ def verify_consultation(db: Session, consultation_id: str) -> Consultation:
     return consultation
 
 
+def _carry_over_resolutions(old, new):
+    """Copy doctor resolutions from a previous comparison onto matching items of a new one.
+    Match key is (category, label, type, normalized intake_value, normalized consultation_value);
+    ids are positional and unstable.
+    Only items the doctor actually resolved (status 'resolved' with non-empty resolution) are carried."""
+    if old is None:
+        return new
+
+    def _normalize(val):
+        return (val or "").strip().lower()
+
+    def _key(item):
+        return (
+            item.category,
+            item.label,
+            item.type,
+            _normalize(item.intake_value),
+            _normalize(item.consultation_value),
+        )
+
+    resolved = {}
+    for item in old.items:
+        if item.status == "resolved" and item.resolution and item.resolution.strip():
+            resolved[_key(item)] = item
+    for item in new.items:
+        previous = resolved.get(_key(item))
+        if previous is not None:
+            item.resolution = previous.resolution
+            item.status = "resolved"
+    return new
+
+
 def compare_consultation(db: Session, consultation_id: str) -> Consultation:
     """
     Runs the Comparison / Conflict Intelligence Agent (Agent 4)
@@ -421,6 +453,7 @@ def compare_consultation(db: Session, consultation_id: str) -> Consultation:
         )
 
     from backend.app.db.models import IntakeData
+    from backend.app.schemas.consultation import ComparisonResults
     from backend.app.services.comparison_service import compare_intake_and_consultation
 
     intake_data = None
@@ -434,10 +467,18 @@ def compare_consultation(db: Session, consultation_id: str) -> Consultation:
             .first()
         )
 
+    previous_results = None
+    if consultation.comparison_results:
+        try:
+            previous_results = ComparisonResults.model_validate_json(consultation.comparison_results)
+        except Exception:
+            previous_results = None
+
     comp_results = compare_intake_and_consultation(
         intake_data=intake_data,
         consultation=consultation,
     )
+    comp_results = _carry_over_resolutions(previous_results, comp_results)
 
     consultation.comparison_results = comp_results.model_dump_json()
     consultation.updated_at = utc_now()
@@ -592,4 +633,234 @@ def finalize_consultation(
     db.commit()
     db.refresh(consultation)
     return consultation
+
+
+def _soap_draft_is_doctor_edited(consultation: Consultation) -> bool:
+    """
+    Determines whether a SOAP draft has been modified by a clinician.
+    Uses the timestamp rule: updated_at > generated_at.
+    Handles timezone-aware and naive datetime comparisons safely.
+    If timestamps are ambiguous or missing while a draft exists, errs on the
+    side of clinical safety by preserving the existing draft.
+    """
+    if not consultation.soap_draft:
+        return False
+    from backend.app.schemas.consultation import SoapDraft
+    try:
+        draft = SoapDraft.model_validate_json(consultation.soap_draft)
+    except Exception:
+        return True
+
+    if not draft.generated_at or not draft.updated_at:
+        return True
+
+    gen = draft.generated_at
+    upd = draft.updated_at
+    if gen.tzinfo is None and upd.tzinfo is not None:
+        gen = gen.replace(tzinfo=timezone.utc)
+    elif gen.tzinfo is not None and upd.tzinfo is None:
+        upd = upd.replace(tzinfo=timezone.utc)
+
+    return upd > gen
+
+
+def run_pipeline(
+    db: Session,
+    consultation_id: str,
+    preserve_doctor_edits: bool = True,
+):
+    """
+    Orchestrates the consultation intelligence pipeline:
+    1. Clinical Extraction (Agent 1)
+    2. SOAP Draft Generation (Agent 2)
+    3. SOAP Claim Verification (Agent 3)
+    4. Intake-versus-Consultation Comparison (Agent 4)
+
+    Validation rules (evaluated BEFORE any stage execution):
+    - Missing consultation: HTTP 404
+    - Finalized consultation: HTTP 400
+    - Empty or whitespace transcript: HTTP 400
+
+    Stage failure handling:
+    - Stage exceptions are caught and recorded with status 'failed'.
+    - Dependent stages are skipped if required outputs are unavailable.
+    - Completed stage results are preserved.
+    - If preserve_doctor_edits is True and the draft is clinician-modified
+      (updated_at > generated_at), SOAP generation is skipped and the existing draft is preserved.
+    """
+    import time
+    from backend.app.schemas.consultation import (
+        ConsultationResponse,
+        PipelineResponse,
+        PipelineStageResult,
+    )
+
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+    if not consultation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Consultation with ID '{consultation_id}' not found.",
+        )
+
+    if consultation.final_record or consultation.finalized_at or consultation.status == "finalized":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot run pipeline on a finalized consultation.",
+        )
+
+    if not consultation.transcript or not consultation.transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Consultation transcript is empty. Please enter or record a transcript before running the pipeline.",
+        )
+
+    stages: List[PipelineStageResult] = []
+    extraction_failed = False
+    soap_failed = False
+
+    # Stage 1: Extraction
+    t0 = time.perf_counter()
+    try:
+        consultation = extract_and_save_clinical_data(db, consultation_id)
+        stages.append(
+            PipelineStageResult(
+                name="extraction",
+                status="completed",
+                detail="Clinical information extracted successfully.",
+                duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+            )
+        )
+    except Exception as exc:
+        err_msg = getattr(exc, "detail", str(exc))
+        stages.append(
+            PipelineStageResult(
+                name="extraction",
+                status="failed",
+                detail=f"Extraction failed: {err_msg}",
+                duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+            )
+        )
+        extraction_failed = True
+
+    # Stage 2: SOAP Generation
+    if extraction_failed or not consultation.extracted_clinical_data or not consultation.extracted_clinical_data.strip():
+        stages.append(
+            PipelineStageResult(
+                name="soap_generation",
+                status="skipped",
+                detail="Skipped because clinical extraction failed or is unavailable.",
+                duration_ms=0.0,
+            )
+        )
+        soap_failed = True
+    elif preserve_doctor_edits and _soap_draft_is_doctor_edited(consultation):
+        stages.append(
+            PipelineStageResult(
+                name="soap_generation",
+                status="skipped",
+                detail="Doctor-edited SOAP draft preserved.",
+                duration_ms=0.0,
+            )
+        )
+    else:
+        t0 = time.perf_counter()
+        try:
+            consultation = generate_and_save_soap_draft(db, consultation_id)
+            stages.append(
+                PipelineStageResult(
+                    name="soap_generation",
+                    status="completed",
+                    detail="SOAP draft generated successfully.",
+                    duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+                )
+            )
+        except Exception as exc:
+            err_msg = getattr(exc, "detail", str(exc))
+            stages.append(
+                PipelineStageResult(
+                    name="soap_generation",
+                    status="failed",
+                    detail=f"SOAP generation failed: {err_msg}",
+                    duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+                )
+            )
+            soap_failed = True
+
+    # Stage 3: Verification
+    if soap_failed or not consultation.soap_draft or not consultation.soap_draft.strip():
+        stages.append(
+            PipelineStageResult(
+                name="verification",
+                status="skipped",
+                detail="Skipped because SOAP draft is unavailable.",
+                duration_ms=0.0,
+            )
+        )
+    else:
+        t0 = time.perf_counter()
+        try:
+            consultation = verify_consultation(db, consultation_id)
+            stages.append(
+                PipelineStageResult(
+                    name="verification",
+                    status="completed",
+                    detail="SOAP claims verified successfully.",
+                    duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+                )
+            )
+        except Exception as exc:
+            err_msg = getattr(exc, "detail", str(exc))
+            stages.append(
+                PipelineStageResult(
+                    name="verification",
+                    status="failed",
+                    detail=f"Verification failed: {err_msg}",
+                    duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+                )
+            )
+
+    # Stage 4: Comparison
+    if extraction_failed or not consultation.extracted_clinical_data or not consultation.extracted_clinical_data.strip():
+        stages.append(
+            PipelineStageResult(
+                name="comparison",
+                status="skipped",
+                detail="Skipped because clinical extraction is unavailable.",
+                duration_ms=0.0,
+            )
+        )
+    else:
+        t0 = time.perf_counter()
+        try:
+            consultation = compare_consultation(db, consultation_id)
+            stages.append(
+                PipelineStageResult(
+                    name="comparison",
+                    status="completed",
+                    detail="Intake vs consultation comparison completed.",
+                    duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+                )
+            )
+        except Exception as exc:
+            err_msg = getattr(exc, "detail", str(exc))
+            stages.append(
+                PipelineStageResult(
+                    name="comparison",
+                    status="failed",
+                    detail=f"Comparison failed: {err_msg}",
+                    duration_ms=round((time.perf_counter() - t0) * 1000, 2),
+                )
+            )
+
+    has_failures = any(s.status == "failed" for s in stages)
+    all_stages_accounted = all(s.status in ("completed", "skipped") for s in stages)
+    completed = all_stages_accounted and not has_failures
+
+    db.refresh(consultation)
+
+    return PipelineResponse(
+        completed=completed,
+        stages=stages,
+        consultation=ConsultationResponse.model_validate(consultation),
+    )
 

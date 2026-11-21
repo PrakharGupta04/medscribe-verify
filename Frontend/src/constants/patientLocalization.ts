@@ -93,7 +93,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     welcomeDesc: 'Please complete your pre-consultation form. Your responses help your doctor prepare for your visit.',
     startCheckIn: 'Start Check-In',
     startingCheckIn: 'Starting Check-In…',
-    privateNote: 'Private and encrypted. Your information goes directly to your doctor.',
+    privateNote: 'Your information goes directly to your doctor. This is a demonstration build, so please do not enter real patient data.',
     qrScanNote: 'Scan from your own device to complete the form on your phone',
     poweredBy: 'Powered by Medscribe-Verify',
 
@@ -107,7 +107,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     nameError: 'Please enter your name.',
     continueBtn: 'Continue →',
     backBtn: '← Back',
-    privateEncrypted: 'This session is private and encrypted.',
+    privateEncrypted: 'Demonstration build: sessions are not encrypted or audited.',
 
     symptomsTitle: 'What brings you in today?',
     symptomsDesc: "Select all that apply. We'll ask follow-up questions based on your selection.",
@@ -261,7 +261,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     welcomeDesc: 'कृपया अपना परामर्श-पूर्व फॉर्म भरें। आपके उत्तर डॉक्टर को आपकी जांच की तैयारी में मदद करते हैं।',
     startCheckIn: 'चेक-इन शुरू करें',
     startingCheckIn: 'चेक-इन शुरू हो रहा है…',
-    privateNote: 'सुरक्षित और गोपनीय। आपकी जानकारी सीधे आपके डॉक्टर के पास जाती है।',
+    privateNote: 'आपकी जानकारी सीधे आपके डॉक्टर तक पहुँचती है। यह डेमो संस्करण है, कृपया वास्तविक मरीज़ का डेटा दर्ज न करें।',
     qrScanNote: 'अपने मोबाइल पर फॉर्म भरने के लिए इस कोड को स्कैन करें',
     poweredBy: 'पावर्ड बाय मेडस्क्राइब-वेरीफाई',
 
@@ -275,7 +275,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     nameError: 'कृपया अपना नाम दर्ज करें।',
     continueBtn: 'आगे बढ़ें →',
     backBtn: '← वापस',
-    privateEncrypted: 'यह सत्र पूरी तरह निजी और सुरक्षित (एन्क्रिप्टेड) है।',
+    privateEncrypted: 'डेमो संस्करण: सत्र एन्क्रिप्टेड या ऑडिट किए हुए नहीं हैं।',
 
     symptomsTitle: 'आज आप किस समस्या के लिए आए हैं?',
     symptomsDesc: 'जो भी लक्षण हों उन्हें चुनें। आपके चयन के आधार पर हम कुछ आसान सवाल पूछेंगे।',
@@ -429,7 +429,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     welcomeDesc: 'Kripya apna pre-consultation form complete karein. Isse doctor ko aapki visit ke liye prepare karne me madad milti hai.',
     startCheckIn: 'Check-In Shuru Karein',
     startingCheckIn: 'Check-In Shuru Ho Raha Hai…',
-    privateNote: 'Private aur encrypted. Aapki information direct doctor ke paas secure tarike se jayegi.',
+    privateNote: 'Aapki information seedhe doctor tak jati hai. Yeh demo build hai, isliye real patient data enter na karein.',
     qrScanNote: 'Apne mobile se scan karke phone par form complete karein',
     poweredBy: 'Powered by Medscribe-Verify',
 
@@ -443,7 +443,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     nameError: 'Kripya apna naam enter karein.',
     continueBtn: 'Aage Badhein →',
     backBtn: '← Peeche',
-    privateEncrypted: 'Yeh session private aur encrypted hai.',
+    privateEncrypted: 'Demo build: sessions encrypted ya audited nahi hain.',
 
     symptomsTitle: 'Aaj kya takleef hai?',
     symptomsDesc: 'Jo symptoms hain unhe select karein. Hum aage kuch simple follow-up sawal sochenge.',
