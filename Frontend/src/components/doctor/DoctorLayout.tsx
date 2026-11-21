@@ -3,19 +3,29 @@ import { ReactNode } from 'react';
 type NavItem = { id: string; label: string; icon: string; badge?: number };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'queue', label: 'Queue', icon: '👥', badge: 3 },
-  { id: 'patients', label: 'Patients', icon: '📋' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+  { id: 'queue', label: 'Queue', icon: '👥' },
 ];
+
+function getDoctorInitials(name: string): string {
+  if (!name.trim()) return 'DR';
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const filtered = words.filter(w => !/^dr\.?$/i.test(w));
+  const targetWords = filtered.length > 0 ? filtered : words;
+  const initials = targetWords.slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  return initials || 'DR';
+}
 
 interface DoctorLayoutProps {
   children: ReactNode;
   activeNav: string;
+  doctorName: string;
   onNav: (id: string) => void;
   onLogout: () => void;
 }
 
-export default function DoctorLayout({ children, activeNav, onNav, onLogout }: DoctorLayoutProps) {
+export default function DoctorLayout({ children, activeNav, doctorName, onNav, onLogout }: DoctorLayoutProps) {
+  const initials = getDoctorInitials(doctorName);
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar */}
@@ -56,10 +66,13 @@ export default function DoctorLayout({ children, activeNav, onNav, onLogout }: D
 
         <div className="p-3 border-t border-slate-100">
           <div className="flex items-center gap-2 px-3 py-2 mb-1">
-            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">JP</div>
-            <div>
-              <div className="text-xs font-medium text-slate-800">Dr. J. Patel</div>
-              <div className="text-xs text-slate-400">GP</div>
+            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
+              {initials}
+            </div>
+            <div className="overflow-hidden">
+              <div className="text-xs font-medium text-slate-800 truncate" title={doctorName}>
+                {doctorName || 'Attending Physician'}
+              </div>
             </div>
           </div>
           <button onClick={onLogout} className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors">

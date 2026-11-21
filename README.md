@@ -169,7 +169,15 @@ Medscribe/
    ```bash
    npm run dev
    ```
-   The UI will be accessible at `http://localhost:5173`.
+   The UI will be accessible at `http://localhost:8443`.
+
+---
+
+## ⚠️ Known Limitations
+
+- **Simulated Doctor Sign-In**: Doctor authentication is simulated for demo purposes (no JWT, RBAC, audit logging, or encryption).
+- **Manual Speaker Labeling**: Consultation transcripts use manual speaker tagging; automatic speaker diarization is not implemented.
+- **SQLite Single-User Database**: Uses a local SQLite database suited for single-user prototyping and demonstration, not concurrent multi-tenant production.
 
 ---
 

@@ -103,7 +103,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNamePlaceholder: 'e.g. Sarah Miller',
     dobLabel: 'Date of birth',
     phoneLabel: 'Phone number (optional)',
-    phonePlaceholder: '+44 7700 000 000',
+    phonePlaceholder: '+91 98765 43210',
     nameError: 'Please enter your name.',
     continueBtn: 'Continue →',
     backBtn: '← Back',
@@ -528,7 +528,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     symptomLabels: {
       diff_swallow: 'Nigalne me dikkat',
       ear_pain: 'Kaan me dard',
-      runny_nose: 'Naak behna / z जुकाम',
+      runny_nose: 'Naak behna / Zukam',
       chills: 'Thand lagna (Chills)',
       rash: 'Chakatte ya rash',
       nausea: 'Ulti jaisa lagna (Nausea)',

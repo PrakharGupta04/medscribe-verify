@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
 from backend.app.db.models import Consultation, Patient, QueueEntry, IntakeSession
 
 
@@ -506,7 +507,7 @@ def finalize_consultation(
     assessment: Optional[str] = None,
     plan: Optional[str] = None,
     doctor_notes: Optional[str] = None,
-    doctor_name: Optional[str] = "Dr. J. Patel",
+    doctor_name: Optional[str] = None,
 ) -> Consultation:
     """
     Finalizes a consultation with doctor review and approval.
@@ -564,7 +565,7 @@ def finalize_consultation(
         visit_date=now.strftime("%d %b %Y"),
         soap=final_soap_obj,
         doctor_notes=doctor_notes.strip() if doctor_notes else None,
-        doctor_name=(doctor_name or "Dr. J. Patel").strip(),
+        doctor_name=(doctor_name or "").strip() or settings.DEFAULT_DOCTOR_NAME,
         status="doctor-approved",
         approved_at=now,
         provenance="doctor-approved-final-record",

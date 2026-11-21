@@ -108,7 +108,7 @@ class FinalMedicalRecord(BaseModel):
     visit_date: Optional[str] = None
     soap: SoapDraft
     doctor_notes: Optional[str] = None
-    doctor_name: str = "Dr. J. Patel"
+    doctor_name: str
     status: str = "doctor-approved"
     approved_at: datetime
     provenance: str = "doctor-approved-final-record"
@@ -120,7 +120,7 @@ class FinalizeConsultationRequest(BaseModel):
     assessment: Optional[str] = None
     plan: Optional[str] = None
     doctor_notes: Optional[str] = None
-    doctor_name: Optional[str] = "Dr. J. Patel"
+    doctor_name: Optional[str] = None
 
 
 class ResolveDiscrepancyRequest(BaseModel):

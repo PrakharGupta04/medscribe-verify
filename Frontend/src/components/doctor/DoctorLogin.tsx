@@ -2,17 +2,27 @@ import { useState } from 'react';
 import { Button } from '../ui';
 
 interface DoctorLoginProps {
-  onLogin: () => void;
+  onLogin: (doctorName: string) => void;
 }
 
 export default function DoctorLogin({ onLogin }: DoctorLoginProps) {
-  const [email, setEmail] = useState('j.patel@medclinic.nhs.uk');
-  const [password, setPassword] = useState('••••••••');
+  const [doctorName, setDoctorName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = () => {
+    if (!doctorName.trim()) {
+      setNameError('Please enter your name.');
+      return;
+    }
+    setNameError('');
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(); }, 800);
+    setTimeout(() => {
+      setLoading(false);
+      onLogin(doctorName.trim());
+    }, 800);
   };
 
   return (
@@ -35,7 +45,7 @@ export default function DoctorLogin({ onLogin }: DoctorLoginProps) {
         </div>
         <div className="space-y-3">
           {[
-            { icon: '🔒', text: 'All activity is audit-logged' },
+            { icon: '🔒', text: 'Demo build — simulated sign-in' },
             { icon: '✓', text: 'AI output is always doctor-reviewed' },
             { icon: '📋', text: 'Source-aware patient records' },
           ].map(item => (
@@ -55,7 +65,21 @@ export default function DoctorLogin({ onLogin }: DoctorLoginProps) {
 
           <div className="flex flex-col gap-4 mb-6">
             <div>
-              <label className="text-sm font-medium text-slate-700 block mb-1">Email address</label>
+              <label className="text-sm font-medium text-slate-700 block mb-1">Your name <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                placeholder="e.g. Dr. Alex Smith"
+                value={doctorName}
+                onChange={e => {
+                  setDoctorName(e.target.value);
+                  if (nameError) setNameError('');
+                }}
+                className={`w-full px-3 py-2.5 rounded-lg border ${nameError ? 'border-red-500' : 'border-slate-200'} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              />
+              {nameError && <p className="text-xs text-red-600 mt-1">{nameError}</p>}
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1">Email address (optional)</label>
               <input
                 type="email"
                 value={email}
@@ -64,7 +88,7 @@ export default function DoctorLogin({ onLogin }: DoctorLoginProps) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 block mb-1">Password</label>
+              <label className="text-sm font-medium text-slate-700 block mb-1">Password (not verified in demo)</label>
               <input
                 type="password"
                 value={password}
@@ -79,7 +103,7 @@ export default function DoctorLogin({ onLogin }: DoctorLoginProps) {
           </Button>
 
           <div className="mt-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <p className="text-xs text-amber-800">⚠ All activity in this system is logged for clinical audit purposes.</p>
+            <p className="text-xs text-amber-800">Demonstration system — sign-in is simulated and no data is encrypted or audit-logged. Not for clinical use.</p>
           </div>
         </div>
       </div>

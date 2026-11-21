@@ -141,15 +141,11 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
   const [phoneError, setPhoneError] = useState('');
 
   // Step 2: Symptoms start completely fresh for new visits
-  const [selectedComplaints, setSelectedComplaints] = useState<string[]>(
-    initialPatient ? [] : ['Fever', 'Sore Throat']
-  );
+  const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
   const [otherSymptomText, setOtherSymptomText] = useState('');
   const [duration, setDuration] = useState('3–5 days');
   const [severity, setSeverity] = useState(6);
-  const [additionalSymptoms, setAdditionalSymptoms] = useState<string[]>(
-    initialPatient ? [] : ['diff_swallow', 'runny_nose', 'chills']
-  );
+  const [additionalSymptoms, setAdditionalSymptoms] = useState<string[]>([]);
   const [adaptiveAnswers, setAdaptiveAnswers] = useState<Record<string, string>>({});
 
   // Step 3: Medical history starts completely fresh for new visits
