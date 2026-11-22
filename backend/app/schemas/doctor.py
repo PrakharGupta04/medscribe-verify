@@ -10,7 +10,7 @@ class PatientDemographics(BaseModel):
     age: Optional[str] = "—"
     dob: Optional[str] = "—"
     phone: Optional[str] = "—"
-    gender: str = "Not specified"
+    gender: str = "Not documented"
 
 
 class PreConsultationSummary(BaseModel):
@@ -29,6 +29,8 @@ class PreConsultationSummary(BaseModel):
     submitted_at: str
     provenance: str = "patient-reported"
     clinical_notice: str
+    translation_fallback: bool = False
+    translation_warning: Optional[str] = None
 
 
 class DoctorIntakeSummaryResponse(BaseModel):

@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta, timezone
 from backend.app.db.models import IntakeSession
 
@@ -316,4 +317,144 @@ def test_legacy_condition_notes_backward_compatibility(client):
     # Verify additional_notes cleaned of legacy condition prefix
     assert doc_summary["additional_notes"] == "Legacy free-form note."
 
+
+def test_strict_gender_validation(client):
+    """
+    Test strict gender validation on schema and API:
+    - Supported values accepted and normalized.
+    - Case-insensitive matching.
+    - None, empty string, and whitespace accepted as empty string.
+    - Unsupported values rejected with HTTP 422.
+    """
+    from pydantic import ValidationError
+    from backend.app.schemas.intake import IntakeSubmitRequest
+
+    # Schema-level tests: valid values and case normalization
+    valid_cases = [
+        ("Male", "Male"),
+        ("male", "Male"),
+        ("MALE", "Male"),
+        ("Female", "Female"),
+        ("female", "Female"),
+        ("Non-binary", "Non-binary"),
+        ("non-binary", "Non-binary"),
+        ("non binary", "Non-binary"),
+        ("Other", "Other"),
+        ("other", "Other"),
+        ("Prefer not to say", "Prefer not to say"),
+        ("prefer not to say", "Prefer not to say"),
+        ("", ""),
+        (None, ""),
+        ("   ", ""),
+    ]
+    for raw, expected in valid_cases:
+        req = IntakeSubmitRequest(
+            name="Test Patient",
+            gender=raw,
+            selected_complaints=["Fever"],
+            duration="1–2 days",
+            severity=5,
+        )
+        assert req.gender == expected, f"Failed for {raw}: got {req.gender}, expected {expected}"
+
+    # Schema-level tests: unsupported values must raise ValidationError
+    invalid_cases = ["Alien", "Random", "Unknown", "123", "man", "woman"]
+    for invalid in invalid_cases:
+        with pytest.raises(ValidationError):
+            IntakeSubmitRequest(
+                name="Test Patient",
+                gender=invalid,
+                selected_complaints=["Fever"],
+                duration="1–2 days",
+                severity=5,
+            )
+
+    # API-level test: rejected with HTTP 422
+    s_res = client.post("/api/intake/sessions")
+    token = s_res.json()["session_token"]
+    res = client.post(
+        f"/api/intake/sessions/{token}/submit",
+        json={
+            "name": "Invalid Gender Patient",
+            "gender": "Alien",
+            "selected_complaints": ["Fever"],
+            "duration": "1–2 days",
+            "severity": 5,
+        },
+    )
+    assert res.status_code == 422
+    assert "Invalid gender" in res.text
+
+
+def test_returning_patient_gender_update_and_preservation(client, db_session):
+    """
+    Ensure returning patients can update an existing gender when explicitly submitted,
+    and preserve the existing database value when gender is omitted or empty.
+    """
+    from backend.app.db.models import Patient
+
+    # 1. First visit: create patient with Male gender
+    s1 = client.post("/api/intake/sessions").json()["session_token"]
+    payload1 = {
+        "name": "Vikram Malhotra",
+        "dob": "1985-06-15",
+        "gender": "Male",
+        "phone": "9876543299",
+        "selected_complaints": ["Headache"],
+        "duration": "3–5 days",
+        "severity": 5,
+        "conditions": ["None of the above"],
+        "medications": "None",
+        "allergies": "None",
+    }
+    r1 = client.post(f"/api/intake/sessions/{s1}/submit", json=payload1)
+    assert r1.status_code == 200
+    p1_id = r1.json()["patient_id"]
+
+    patient = db_session.query(Patient).filter(Patient.id == p1_id).first()
+    assert patient.gender == "Male"
+
+    # 2. Second visit: same patient explicitly updates gender to Non-binary
+    s2 = client.post("/api/intake/sessions").json()["session_token"]
+    payload2 = {
+        "patient_id": p1_id,
+        "name": "Vikram Malhotra",
+        "dob": "1985-06-15",
+        "gender": "Non-binary",
+        "phone": "9876543299",
+        "selected_complaints": ["Cough"],
+        "duration": "1–2 days",
+        "severity": 4,
+        "conditions": ["None of the above"],
+        "medications": "None",
+        "allergies": "None",
+    }
+    r2 = client.post(f"/api/intake/sessions/{s2}/submit", json=payload2)
+    assert r2.status_code == 200
+    assert r2.json()["summary"]["gender"] == "Non-binary"
+
+    db_session.refresh(patient)
+    assert patient.gender == "Non-binary", "Gender must be updated to explicitly submitted value"
+
+    # 3. Third visit: same patient submits without gender (empty string)
+    s3 = client.post("/api/intake/sessions").json()["session_token"]
+    payload3 = {
+        "patient_id": p1_id,
+        "name": "Vikram Malhotra",
+        "dob": "1985-06-15",
+        "gender": "",
+        "phone": "9876543299",
+        "selected_complaints": ["Sore Throat"],
+        "duration": "1–2 days",
+        "severity": 3,
+        "conditions": ["None of the above"],
+        "medications": "None",
+        "allergies": "None",
+    }
+    r3 = client.post(f"/api/intake/sessions/{s3}/submit", json=payload3)
+    assert r3.status_code == 200
+    assert r3.json()["summary"]["gender"] == "Non-binary", "Summary should reflect preserved gender"
+
+    db_session.refresh(patient)
+    assert patient.gender == "Non-binary", "Omitted gender must preserve existing database value"
 

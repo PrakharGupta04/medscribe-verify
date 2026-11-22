@@ -1,6 +1,6 @@
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from backend.app.schemas.consultation import (
     ClinicalExtraction,
@@ -12,6 +12,13 @@ from backend.app.schemas.consultation import (
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+STOPWORDS = {
+    "have", "with", "from", "been", "they", "this", "that", "also", "some",
+    "were", "what", "when", "does", "done", "about", "more", "patient",
+    "reports", "report", "denies", "stated", "states", "there", "their",
+}
 
 
 def split_into_sentences(text: str) -> List[str]:
@@ -33,13 +40,7 @@ def find_matching_snippet(claim: str, text: str) -> Optional[str]:
     if not words:
         return None
 
-    # Stopwords that shouldn't alone count as an evidence match
-    common_stopwords = {
-        "have", "with", "from", "been", "they", "this", "that", "also", "some",
-        "were", "what", "when", "does", "done", "about", "more", "patient",
-        "reports", "report", "denies", "stated", "states", "there", "their",
-    }
-    content_words = [w for w in words if w not in common_stopwords]
+    content_words = [w for w in words if w not in STOPWORDS]
 
     claim_is_negative = any(neg in claim.lower() for neg in ["denies", "denied", "no ", "not ", "without", "never"])
 
@@ -55,8 +56,8 @@ def find_matching_snippet(claim: str, text: str) -> Optional[str]:
         matches = sum(1 for w in words if w in sent_lower)
         content_matches = sum(1 for w in content_words if w in sent_lower)
 
-        # Allow matches >= 2, or for concise claims (<= 2 content words), require at least 1 content word match (e.g. 'vomiting')
-        is_candidate = (matches >= 2) or (len(content_words) <= 2 and content_matches >= 1)
+        # Allow content_matches >= 2, or for concise claims (<= 2 content words), require at least 1 content word match (e.g. 'vomiting')
+        is_candidate = (content_matches >= 2) or (len(content_words) <= 2 and content_matches >= 1)
         if not is_candidate:
             continue
 
@@ -70,6 +71,30 @@ def find_matching_snippet(claim: str, text: str) -> Optional[str]:
             best_sent = sent_clean
 
     return best_sent
+
+
+def best_sentence_overlap(claim: str, transcript: str) -> Optional[Tuple[str, int, int]]:
+    """Return (best_transcript_sentence, matched_word_count, total_claim_content_words)
+    using whole-word matching inside ONE transcript sentence."""
+    content_words = sorted(
+        {w for w in re.findall(r"\b[a-zA-Z]{4,}\b", (claim or "").lower()) if w not in STOPWORDS}
+    )
+    if not content_words or not transcript:
+        return None
+    best_sentence: Optional[str] = None
+    best_matched = -1
+    for raw in re.split(r"(?<=[.!?\n])\s+", transcript):
+        sentence = raw.strip()
+        if not sentence:
+            continue
+        tokens = set(re.findall(r"\b[a-zA-Z]{4,}\b", sentence.lower()))
+        matched = sum(1 for w in content_words if w in tokens)
+        if matched > best_matched:
+            best_matched = matched
+            best_sentence = sentence
+    if best_sentence is None:
+        return None
+    return best_sentence, best_matched, len(content_words)
 
 
 def verify_soap_claims(
@@ -159,11 +184,11 @@ def verify_soap_claims(
                 explanation_str = "Grounding confirmed via extracted clinical entities."
         else:
             # Check if any significant word appears in transcript
-            words_in_transcript = [w for w in re.findall(r"\b[a-zA-Z]{4,}\b", sent_lower) if w in t_lower]
-            if len(words_in_transcript) >= 3:
+            overlap = best_sentence_overlap(sent, t_clean)
+            if overlap is not None and overlap[1] >= 3 and (overlap[1] / overlap[2]) >= 0.6:
                 is_supported = True
-                evidence_str = f"Supported by transcript context (matched terms: {', '.join(words_in_transcript[:4])})"
-                explanation_str = "Contextually supported by transcript discussion."
+                evidence_str = f'"{overlap[0]}"'
+                explanation_str = "Contextually supported: multiple claim terms appear together in one transcript statement."
             else:
                 is_supported = False
                 source_type = "none"

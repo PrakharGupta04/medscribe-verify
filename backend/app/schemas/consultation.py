@@ -108,7 +108,7 @@ class FinalMedicalRecord(BaseModel):
     visit_date: Optional[str] = None
     soap: SoapDraft
     doctor_notes: Optional[str] = None
-    doctor_name: str = "Dr. J. Patel"
+    doctor_name: str
     status: str = "doctor-approved"
     approved_at: datetime
     provenance: str = "doctor-approved-final-record"
@@ -120,7 +120,7 @@ class FinalizeConsultationRequest(BaseModel):
     assessment: Optional[str] = None
     plan: Optional[str] = None
     doctor_notes: Optional[str] = None
-    doctor_name: Optional[str] = "Dr. J. Patel"
+    doctor_name: Optional[str] = None
 
 
 class ResolveDiscrepancyRequest(BaseModel):
@@ -210,4 +210,21 @@ class ConsultationResponse(BaseModel):
 class ConsultationTranscriptUpdateRequest(BaseModel):
     transcript: str = Field(..., description="Consultation transcript text (raw or edited)")
     allow_clear: Optional[bool] = Field(False, description="Explicit flag allowing clearing of an existing transcript")
+
+
+class PipelineStageResult(BaseModel):
+    name: str = Field(..., description="Stage name: extraction, soap_generation, verification, comparison")
+    status: str = Field(..., description="Stage status: completed, failed, skipped")
+    detail: Optional[str] = Field(None, description="Details or error message for the stage")
+    duration_ms: float = Field(..., description="Stage duration in milliseconds")
+
+
+class RunPipelineRequest(BaseModel):
+    preserve_doctor_edits: Optional[bool] = Field(True, description="If True, existing doctor-edited SOAP drafts are preserved")
+
+
+class PipelineResponse(BaseModel):
+    completed: bool = Field(..., description="True if all necessary stages completed or were cleanly preserved")
+    stages: List[PipelineStageResult] = Field(default_factory=list, description="Execution result for each stage")
+    consultation: ConsultationResponse = Field(..., description="Updated consultation object")
 

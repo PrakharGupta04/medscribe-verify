@@ -10,14 +10,27 @@ import type {
   ConsultationCreateRequest,
   SoapDraftUpdateRequest,
   FinalizeConsultationRequest,
+  PipelineRunResponse,
 } from '../types/intake';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+const PIPELINE_TIMEOUT_MS =
+  Number(import.meta.env.VITE_PIPELINE_TIMEOUT_MS) || 180000;
+
+async function request<T>(endpoint: string, options?: RequestInit, timeoutMs?: number): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   let response: Response;
+  let controller: AbortController | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  if (timeoutMs && timeoutMs > 0) {
+    controller = new AbortController();
+    timeoutId = setTimeout(() => {
+      controller?.abort();
+    }, timeoutMs);
+  }
 
   try {
     response = await fetch(url, {
@@ -26,10 +39,20 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
         'Content-Type': 'application/json',
         ...options?.headers,
       },
+      signal: controller ? controller.signal : options?.signal,
     });
   } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(
+        `Request timed out after ${Math.round(timeoutMs! / 1000)} seconds. Please try again.`
+      );
+    }
     const message = err instanceof Error ? err.message : 'Network error';
     throw new Error(`Unable to connect to Medscribe-Verify server (${message}). Ensure the backend is running.`);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 
   if (!response.ok) {
@@ -198,6 +221,23 @@ export const api = {
     });
   },
 
+  /** Run complete consultation intelligence pipeline in one call (Agents 1-4) */
+  runPipeline(
+    consultationId: string,
+    preserveDoctorEdits: boolean = true
+  ): Promise<PipelineRunResponse> {
+    return request<PipelineRunResponse>(
+      `/consultations/${consultationId}/run-pipeline`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          preserve_doctor_edits: preserveDoctorEdits,
+        }),
+      },
+      PIPELINE_TIMEOUT_MS
+    );
+  },
+
   /** Record doctor resolution for a specific Module 1 vs Module 2 discrepancy */
   resolveDiscrepancy(
     consultationId: string,
@@ -222,6 +262,39 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+
+  /**
+   * Download the longitudinal patient record as a PDF blob.
+   * Uses a raw fetch (not the JSON request helper) because the response is binary.
+   */
+  async downloadPatientRecordPdf(patientId: string): Promise<Blob> {
+    const url = `${API_BASE_URL}/patients/${patientId}/record/pdf`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/pdf' },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Network error';
+      throw new Error(
+        `Unable to connect to Medscribe server (${message}). Ensure the backend is running.`
+      );
+    }
+    if (!response.ok) {
+      let errorDetail = `PDF request failed with status ${response.status}`;
+      try {
+        const errorJson = await response.json();
+        if (errorJson.detail && typeof errorJson.detail === 'string') {
+          errorDetail = errorJson.detail;
+        }
+      } catch {
+        // Ignore JSON parse error on non-json error responses
+      }
+      throw new Error(errorDetail);
+    }
+    return response.blob();
   },
 
   /** Transcribe audio recording into text for free-text review/editing */

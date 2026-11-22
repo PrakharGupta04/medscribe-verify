@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ]
     SESSION_EXPIRE_HOURS: int = 24
     GROQ_API_KEY: str = ""
+    DEFAULT_DOCTOR_NAME: str = "Attending Physician"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

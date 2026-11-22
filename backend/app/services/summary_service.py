@@ -1,12 +1,47 @@
 import json
+import re
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from backend.app.db.models import IntakeData, Patient
 from backend.app.schemas.doctor import (
     DoctorIntakeSummaryResponse,
     PatientDemographics,
     PreConsultationSummary,
 )
+from backend.app.services.normalization_service import is_hindi_or_hinglish
+
+
+def calculate_age(dob_str: Optional[str]) -> str:
+    """
+    Dynamically calculates current patient age in years from DOB string.
+    Supports standard formats (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, YYYY/MM/DD, etc.)
+    or standalone 4-digit birth year.
+    Returns calculated age as a string, or "—" if DOB is missing or unparseable.
+    """
+    if not dob_str or not dob_str.strip() or dob_str.strip() == "—":
+        return "—"
+    trimmed = dob_str.strip()
+    today = datetime.now().date()
+    parsed_date = None
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y.%m.%d"):
+        try:
+            parsed_date = datetime.strptime(trimmed, fmt).date()
+            break
+        except ValueError:
+            pass
+
+    if parsed_date:
+        years = today.year - parsed_date.year - ((today.month, today.day) < (parsed_date.month, parsed_date.day))
+        return str(max(0, years))
+
+    # Fallback: extract 4-digit year if full date format was irregular
+    match = re.search(r"\b(19\d\d|20\d\d)\b", trimmed)
+    if match:
+        year = int(match.group(1))
+        return str(max(0, today.year - year))
+
+    return "—"
+
 
 CLINICAL_DISCLAIMER = (
     "This summary was generated deterministically from the patient's self-reported intake form. "
@@ -148,7 +183,7 @@ def build_pre_consult_summary(
     # Map symptom follow-up questionnaire responses only (exclude condition answers & internal keys)
     adaptive_mapped = {}
     for k, v in raw_adaptive.items():
-        if k == "__condition_details__" or k in CONDITION_QUESTION_MAPPINGS:
+        if k in ("__condition_details__", "__normalization_fallback__") or k in CONDITION_QUESTION_MAPPINGS:
             continue
         label = ADAPTIVE_QUESTION_LABELS.get(k, k)
         adaptive_mapped[label] = v
@@ -172,10 +207,23 @@ def build_pre_consult_summary(
         mrn=patient.mrn,
         name=patient.name,
         first_name=first_name,
-        age="28" if "1998" in (patient.dob or "") else ("—" if not patient.dob else patient.dob),
+        age=calculate_age(patient.dob),
         dob=patient.dob or "—",
         phone=patient.phone or "—",
-        gender=patient.gender or "Not specified",
+        gender=patient.gender if (patient.gender and patient.gender not in ("Not specified", "Not documented", "")) else "Not documented",
+    )
+
+    # Detect if normalization fallback was triggered or if untranslated Hindi/Hinglish remains
+    translation_fallback = bool(raw_adaptive.get("__normalization_fallback__", False))
+    if not translation_fallback:
+        for txt in [intake.medications, intake.allergies, cleaned_notes]:
+            if txt and is_hindi_or_hinglish(txt):
+                translation_fallback = True
+                break
+    translation_warning = (
+        "⚠️ Translation to English was skipped or unavailable for some patient-reported responses. Raw patient text is displayed."
+        if translation_fallback
+        else None
     )
 
     summary = PreConsultationSummary(
@@ -194,6 +242,8 @@ def build_pre_consult_summary(
         submitted_at=submitted_str,
         provenance="patient-reported",
         clinical_notice=CLINICAL_DISCLAIMER,
+        translation_fallback=translation_fallback,
+        translation_warning=translation_warning,
     )
 
     return DoctorIntakeSummaryResponse(

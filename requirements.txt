@@ -1,0 +1,13 @@
+# Medscribe backend dependencies
+# Install with: pip install -r requirements.txt
+
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic-settings
+python-multipart
+groq
+httpx
+pytest
+reportlab>=5.0.0

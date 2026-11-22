@@ -10,6 +10,7 @@ export interface IntakeDraftData {
   mrn?: string;
   name?: string;
   dob?: string;
+  gender?: string;
   phone?: string;
   selected_complaints: string[];
   duration?: string;
@@ -37,6 +38,7 @@ export interface IntakeSubmitRequest {
   mrn?: string;
   name: string;
   dob?: string;
+  gender?: string;
   phone?: string;
   selected_complaints: string[];
   duration: string;
@@ -123,6 +125,8 @@ export interface PreConsultationSummary {
   submitted_at: string;
   provenance: string;
   clinical_notice: string;
+  translation_fallback?: boolean;
+  translation_warning?: string | null;
 }
 
 export interface DoctorIntakeSummaryResponse {
@@ -277,5 +281,22 @@ export interface ConsultationCreateRequest {
   patient_id: string;
   session_id?: string;
   force_new?: boolean;
+}
+
+export interface PipelineStageResult {
+  name: string;
+  status: 'completed' | 'failed' | 'skipped';
+  detail?: string | null;
+  duration_ms: number;
+}
+
+export interface PipelineRunResponse {
+  completed: boolean;
+  stages: PipelineStageResult[];
+  consultation: ConsultationResponse;
+}
+
+export interface RunPipelineRequest {
+  preserve_doctor_edits?: boolean;
 }
 

@@ -15,6 +15,67 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def is_negative_allergy_statement(text: Optional[str]) -> bool:
+    """Returns True only for explicit negative allergy statements such as NKDA,
+    no known drug allergies, no allergies, none reported, and denies allergies.
+    Empty strings, None, whitespace-only values, and 'not documented' return False,
+    as they represent unknown or undocumented allergy status.
+    """
+    if not text:
+        return False
+    trimmed = text.strip()
+    if not trimmed:
+        return False
+
+    cleaned = re.sub(r"[^\w\s]", " ", trimmed.lower())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned or cleaned in {"not documented", "unknown", "unspecified", "not recorded"}:
+        return False
+
+    no_allergy_phrases = {
+        "none",
+        "no",
+        "nil",
+        "none reported",
+        "none known",
+        "no allergies",
+        "no known allergies",
+        "no known drug allergies",
+        "no known drug allergy",
+        "no drug allergies",
+        "no drug allergy",
+        "nkda",
+        "denies",
+        "denies allergies",
+    }
+    if cleaned in no_allergy_phrases:
+        return True
+    words = cleaned.split()
+    if "nkda" in words:
+        return True
+    if "no known" in cleaned:
+        return True
+    if cleaned.startswith("no ") and ("allerg" in cleaned):
+        return True
+    if cleaned.startswith("none") and ("allerg" in cleaned or "known" in cleaned):
+        return True
+    if cleaned.startswith("denies") and ("allerg" in cleaned):
+        return True
+    return False
+
+
+def is_missing_or_undocumented_allergy(text: Optional[str]) -> bool:
+    """Returns True if allergy information is missing, blank, whitespace, or 'not documented'."""
+    if not text:
+        return True
+    trimmed = text.strip()
+    if not trimmed:
+        return True
+    cleaned = re.sub(r"[^\w\s]", " ", trimmed.lower())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return not cleaned or cleaned in {"not documented", "unknown", "unspecified", "not recorded"}
+
+
 def parse_json_safely(val: Optional[str], default=None):
     if not val:
         return default if default is not None else []
@@ -187,7 +248,12 @@ def compare_intake_and_consultation(
 
     m2_symptom_names = [name for name, _ in m2_symptoms_clean]
     m2_meds = [m.name for m in (clinical_data.medications if clinical_data else [])]
-    m2_allergies = [a.substance for a in (clinical_data.allergies if clinical_data else [])]
+    m2_allergies = [
+        a.substance.strip() for a in (clinical_data.allergies if clinical_data else [])
+        if a.substance
+        and not is_missing_or_undocumented_allergy(a.substance)
+        and not is_negative_allergy_statement(a.substance)
+    ]
     m2_history = [h for h in (clinical_data.medical_history if clinical_data else [])]
 
     items: List[ComparisonItem] = []
@@ -395,18 +461,31 @@ def compare_intake_and_consultation(
             item_idx += 1
 
     # 4. COMPARE ALLERGIES
-    m1_no_allergies = not m1_allergies or m1_allergies.lower() in {
-        "none",
-        "no",
-        "n/a",
-        "no allergies",
-        "none reported",
-        "no known allergies",
-        "no known drug allergies",
-    }
+    m1_no_allergies = is_negative_allergy_statement(m1_allergies)
+    m1_missing_allergies = is_missing_or_undocumented_allergy(m1_allergies)
     m2_has_allergies = len(m2_allergies) > 0
 
-    if m1_no_allergies and m2_has_allergies:
+    if m1_missing_allergies and m2_has_allergies:
+        # Pre-consult intake had no documented allergy info, but allergy was disclosed in consultation
+        items.append(
+            ComparisonItem(
+                id=f"comp-alg-{item_idx}",
+                category="allergies",
+                type="new_in_consultation",
+                label="Newly Disclosed Allergy",
+                intake_value="Not documented",
+                consultation_value=", ".join(m2_allergies),
+                severity="info",
+                description=f"Allergy disclosed during consultation (not documented in pre-consult intake): {', '.join(m2_allergies)}.",
+                status="unresolved",
+                resolution=None,
+            )
+        )
+        item_idx += 1
+    elif m1_missing_allergies and not m2_has_allergies:
+        # Pre-consult intake had no documented allergy info and consultation has none: no comparison item or false alert
+        pass
+    elif m1_no_allergies and m2_has_allergies:
         items.append(
             ComparisonItem(
                 id=f"comp-alg-{item_idx}",

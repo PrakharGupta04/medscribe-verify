@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Tabs, Card, SectionLabel, SourceBadge, VerifBadge, AINotice, Button, AllergyTag, Expandable, VoiceButton
 } from '../ui';
-import {
-  SAMPLE_PATIENT, INTAKE_DATA, SOAP_NOTE,
-  VERIFICATION_CLAIMS, CONFLICTS
-} from '../../data/sample';
 import { api } from '../../services/api';
-import type { DoctorIntakeSummaryResponse, PreConsultationSummary, PatientDemographics, ConsultationResponse } from '../../types/intake';
+import type {
+  DoctorIntakeSummaryResponse,
+  PreConsultationSummary,
+  PatientDemographics,
+  ConsultationResponse,
+  PipelineStageResult,
+} from '../../types/intake';
 
 type TabId = 'summary' | 'history' | 'transcript' | 'soap' | 'verification' | 'record';
 
@@ -15,11 +17,12 @@ interface PatientOverviewProps {
   onBack: () => void;
   patientId?: string;
   sessionId?: string;
+  doctorName: string;
   onStartNewVisit?: (patient: { id: string; mrn?: string; name: string; dob?: string; phone?: string }) => void;
 }
 
 function formatVisitDate(dateStr?: string | null): string {
-  if (!dateStr) return '17 Sep 2026';
+  if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
@@ -29,6 +32,10 @@ function formatVisitDate(dateStr?: string | null): string {
   }
 }
 
+function visitDoctorLabel(v?: ConsultationResponse | null): string {
+  return v?.final_record?.doctor_name || '—';
+}
+
 /**
  * Validates whether a text string describes a genuine clinical allergy
  * rather than a patient concern, general symptom, or non-allergy note.
@@ -36,19 +43,43 @@ function formatVisitDate(dateStr?: string | null): string {
 export function isClinicalAllergy(text?: string | null): boolean {
   if (!text) return false;
   const lower = text.trim().toLowerCase();
-  if (
-    lower === 'none' ||
-    lower === 'none reported' ||
-    lower === 'n/a' ||
-    lower === 'no' ||
-    lower === 'no allergies' ||
-    lower === 'denies' ||
-    lower === 'nil' ||
-    lower === 'not documented' ||
-    lower === 'not documented.' ||
-    lower === 'no known allergies' ||
-    lower === 'nkda'
-  ) {
+  const cleaned = lower.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Explicit negative / non-allergy statements (NKDA, denials, none)
+  const noAllergyPhrases = new Set([
+    'none',
+    'none reported',
+    'none known',
+    'n/a',
+    'na',
+    'no',
+    'nil',
+    'no allergies',
+    'no known allergies',
+    'no known drug allergies',
+    'no known drug allergy',
+    'no drug allergies',
+    'no drug allergy',
+    'denies',
+    'denies allergies',
+    'not documented',
+    'not documented.',
+    'nkda',
+  ]);
+
+  if (noAllergyPhrases.has(lower) || noAllergyPhrases.has(cleaned)) {
+    return false;
+  }
+  if (cleaned.split(' ').includes('nkda') || lower.includes('nkda')) {
+    return false;
+  }
+  if (lower.includes('no known')) {
+    return false;
+  }
+  if (lower.startsWith('no ') && lower.includes('allerg')) {
+    return false;
+  }
+  if (lower.startsWith('none') && (lower.includes('allerg') || lower.includes('known'))) {
     return false;
   }
 
@@ -78,7 +109,7 @@ export function isClinicalAllergy(text?: string | null): boolean {
   return true;
 }
 
-export default function PatientOverview({ onBack, patientId, sessionId, onStartNewVisit }: PatientOverviewProps) {
+export default function PatientOverview({ onBack, patientId, sessionId, doctorName, onStartNewVisit }: PatientOverviewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('summary');
   const [approved, setApproved] = useState(false);
   const [doctorData, setDoctorData] = useState<DoctorIntakeSummaryResponse | null>(null);
@@ -127,6 +158,9 @@ export default function PatientOverview({ onBack, patientId, sessionId, onStartN
               })
               .catch(cErr => {
                 console.warn('Consultation initialization:', cErr);
+                if (isMounted) {
+                  setError(cErr instanceof Error ? cErr.message : 'Failed to initialize consultation');
+                }
               });
           }
         }
@@ -218,7 +252,7 @@ export default function PatientOverview({ onBack, patientId, sessionId, onStartN
 
   const isFinalized = Boolean(approved || consultation?.final_record || consultation?.status === 'completed');
 
-  const handleApproveRecord = async () => {
+  const handleApproveRecord = async (notes?: string) => {
     if (!consultation?.id || isFinalized) return;
     try {
       const finalized = await api.finalizeConsultation(consultation.id, {
@@ -226,31 +260,27 @@ export default function PatientOverview({ onBack, patientId, sessionId, onStartN
         objective: consultation.soap_draft?.objective,
         assessment: consultation.soap_draft?.assessment,
         plan: consultation.soap_draft?.plan,
-        doctor_notes: 'Reviewed, verified against source evidence, and approved by attending clinician.',
-        doctor_name: 'Dr. J. Patel',
+        doctor_notes: notes?.trim() || undefined,
+        doctor_name: doctorName || undefined,
       });
       handleConsultationUpdated(finalized);
       setApproved(true);
     } catch (err) {
-      console.warn('Could not finalize consultation via API:', err);
-      try {
-        const completed = await api.completeConsultation(consultation.id);
-        handleConsultationUpdated(completed);
-      } catch {}
-      setApproved(true);
+      console.error('Could not finalize consultation via API:', err);
+      setError(err instanceof Error ? err.message : 'Failed to finalize and approve consultation record.');
     }
   };
 
   // Active patient demographics (API data if loaded, fallback only if pure demo standalone)
   const patient: PatientDemographics = doctorData?.patient || {
-    id: patientId || SAMPLE_PATIENT.id,
-    mrn: doctorData?.patient?.mrn || (patientId ? `MRN-2026-${patientId.slice(0, 4)}` : SAMPLE_PATIENT.id),
-    name: doctorData?.patient?.name || (patientId ? 'Patient Record' : SAMPLE_PATIENT.name),
-    first_name: doctorData?.patient?.first_name || (patientId ? 'Patient' : SAMPLE_PATIENT.firstName),
-    age: doctorData?.patient?.age || (patientId ? '—' : String(SAMPLE_PATIENT.age)),
-    dob: doctorData?.patient?.dob || (patientId ? '—' : SAMPLE_PATIENT.dob),
-    phone: doctorData?.patient?.phone || (patientId ? '—' : SAMPLE_PATIENT.phone),
-    gender: doctorData?.patient?.gender || (patientId ? 'Not specified' : SAMPLE_PATIENT.gender),
+    id: patientId ?? '',
+    mrn: '—',
+    name: 'Patient record',
+    first_name: 'Patient',
+    age: '—',
+    dob: '—',
+    phone: '—',
+    gender: 'Not documented',
   };
 
   const previousVisits = visits.filter(v => v.id !== consultation?.id);
@@ -280,7 +310,7 @@ export default function PatientOverview({ onBack, patientId, sessionId, onStartN
 
   const visitDateLabel = consultation?.created_at
     ? formatVisitDate(consultation.created_at)
-    : doctorData?.summary?.submitted_at || '17 Sep 2026';
+    : doctorData?.summary?.submitted_at ? formatVisitDate(doctorData.summary.submitted_at) : '—';
 
   const visitNumber = useMemo(() => {
     if (!consultation || visits.length === 0) return 1;
@@ -329,7 +359,7 @@ export default function PatientOverview({ onBack, patientId, sessionId, onStartN
                 </span>
               </div>
               <div className="flex items-center gap-3 mt-0.5">
-                <span className="text-sm text-slate-500">Age {patient.age} · {patient.gender} · DOB {patient.dob}</span>
+                <span className="text-sm text-slate-500">Age {patient.age} · {patient.gender && patient.gender !== 'Not specified' ? patient.gender : 'Not documented'} · DOB {patient.dob}</span>
                 <span className="text-slate-300">|</span>
                 <span className="text-xs text-slate-400 font-mono-label">{patient.mrn}</span>
                 {hasAllergy && <AllergyTag substance={allergyDisplay} />}
@@ -527,6 +557,13 @@ function SummaryTab({
         </div>
       )}
 
+      {summary.translation_warning && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
+          <span className="text-base">⚠️</span>
+          <span><strong>Language Notice:</strong> {summary.translation_warning}</span>
+        </div>
+      )}
+
       <div className="space-y-3">
         <Expandable title="Chief Complaint" defaultOpen>
           <p className="text-sm text-slate-700">{summary.chief_complaint}</p>
@@ -674,7 +711,7 @@ function SummaryTab({
               </div>
               <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
                 <SourceBadge type="doctor-confirmed" />
-                <span>Dr. J. Patel</span>
+                <span>{visitDoctorLabel(previousVisits[0])}</span>
                 <span className="text-slate-300">·</span>
                 <span>{previousVisits.length} prior visit{previousVisits.length === 1 ? '' : 's'}</span>
               </div>
@@ -816,7 +853,7 @@ function HistoryTab({
                           {diagnosis}
                         </div>
                         <div className="text-xs text-slate-500 mt-0.5">
-                          Complaint: {complaint} · Dr. J. Patel
+                          Complaint: {complaint} · {visitDoctorLabel(visit)}
                         </div>
                       </div>
 
@@ -905,6 +942,11 @@ function TranscriptTab({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState(false);
   const [speakerRole, setSpeakerRole] = useState<'doctor' | 'patient' | 'unlabeled'>('doctor');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageResult[] | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisSuccess, setAnalysisSuccess] = useState(false);
 
   // Sync state with real consultation transcript when loaded or changed
   useEffect(() => {
@@ -912,6 +954,28 @@ function TranscriptTab({
       setText(consultation.transcript);
     }
   }, [consultation?.id, consultation?.transcript]);
+
+  // Elapsed timer during analysis execution
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    if (analyzing) {
+      const start = Date.now();
+      setElapsedSeconds(0);
+      timer = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
+      }, 500);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [analyzing]);
+
+  const isFinalized = Boolean(
+    consultation?.final_record ||
+    consultation?.finalized_at ||
+    consultation?.status === 'completed' ||
+    consultation?.status === 'finalized'
+  );
 
   const handleVoiceTranscribe = (newSpeech: string) => {
     if (!newSpeech || !newSpeech.trim()) return;
@@ -1015,8 +1079,74 @@ function TranscriptTab({
     }
   };
 
+  const handleAnalyze = async () => {
+    if (analyzing || saving || extracting) return;
+    if (!consultation?.id) {
+      setAnalysisError('No active consultation session found. Please select a patient.');
+      return;
+    }
+
+    if (!text.trim()) {
+      setAnalysisError('Transcript is empty. Please enter, paste, or record a transcript first before analyzing.');
+      return;
+    }
+
+    if (isFinalized) {
+      setAnalysisError('Cannot analyze a finalized consultation.');
+      return;
+    }
+
+    try {
+      setAnalyzing(true);
+      setAnalysisError(null);
+      setAnalysisSuccess(false);
+
+      // 2. Save pending transcript changes before starting analysis
+      if (hasUnsavedChanges) {
+        await handleSave();
+      }
+
+      // 3. Call api.runPipeline with consultation ID and preserveDoctorEdits=true
+      const response = await api.runPipeline(consultation.id, true);
+
+      // 5. Display returned stage statuses
+      setPipelineStages(response.stages);
+
+      // 6. Update consultation using response returned by backend
+      if (onConsultationUpdated && response.consultation) {
+        onConsultationUpdated(response.consultation);
+      }
+
+      // 7. Handle failed and skipped stages correctly
+      const hasFailures = response.stages.some(s => s.status === 'failed');
+      if (!response.completed || hasFailures) {
+        const failedStage = response.stages.find(s => s.status === 'failed');
+        const detail = failedStage?.detail || 'One or more pipeline stages failed.';
+        setAnalysisError(`Pipeline partially failed at stage "${failedStage?.name || 'unknown'}": ${detail}`);
+        // Do NOT call onProcessed
+      } else {
+        setAnalysisSuccess(true);
+        // 10. Call onProcessed only when the pipeline has actually completed successfully
+        onProcessed();
+      }
+    } catch (err: unknown) {
+      // 8. Show a meaningful error if the API call fails
+      const message = err instanceof Error ? err.message : 'Consultation analysis failed';
+      setAnalysisError(message);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const hasUnsavedChanges = consultation ? (consultation.transcript || '') !== text : Boolean(text);
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const isAnalyzeDisabled =
+    analyzing ||
+    saving ||
+    extracting ||
+    !consultation?.id ||
+    !text.trim() ||
+    isFinalized;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -1172,14 +1302,29 @@ function TranscriptTab({
           <div className="flex items-center gap-2">
             <Button
               onClick={handleSave}
-              disabled={saving || !consultation}
+              disabled={saving || analyzing || !consultation || isFinalized}
               size="sm"
             >
               {saving ? 'Saving to Database…' : '💾 Save Transcript'}
             </Button>
             <Button
+              onClick={handleAnalyze}
+              disabled={isAnalyzeDisabled}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+            >
+              {analyzing ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Analyzing Consultation ({elapsedSeconds}s)…
+                </span>
+              ) : (
+                '🚀 Analyze Consultation'
+              )}
+            </Button>
+            <Button
               onClick={handleExtract}
-              disabled={extracting || !text.trim() || !consultation}
+              disabled={extracting || analyzing || saving || !text.trim() || !consultation || isFinalized}
               size="sm"
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
@@ -1197,7 +1342,7 @@ function TranscriptTab({
                 variant="ghost"
                 size="sm"
                 onClick={handleClear}
-                disabled={saving || extracting}
+                disabled={saving || extracting || analyzing || isFinalized}
               >
                 Clear
               </Button>
@@ -1211,6 +1356,108 @@ function TranscriptTab({
           </div>
         </div>
       </div>
+
+      {/* Analysis error notification with retry */}
+      {analysisError && (
+        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">⚠</span>
+            <span>{analysisError}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              disabled={isAnalyzeDisabled}
+              className="px-2.5 py-1 bg-red-600 text-white font-medium text-xs rounded-lg hover:bg-red-700 transition cursor-pointer disabled:opacity-50"
+            >
+              ↻ Retry Analysis
+            </button>
+            <button
+              type="button"
+              onClick={() => setAnalysisError(null)}
+              className="text-red-500 hover:text-red-800 font-bold ml-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Analysis success notification */}
+      {analysisSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
+          <span>✓</span>
+          <span>Consultation analysis complete: Clinical facts extracted, SOAP draft generated, claims verified, and intake compared.</span>
+        </div>
+      )}
+
+      {/* Dynamic Pipeline Stages Status Banner */}
+      {pipelineStages && pipelineStages.length > 0 && (
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800 font-mono-label uppercase tracking-wide">
+                Pipeline Execution Status
+              </span>
+              {analyzing ? (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                  Running ({elapsedSeconds}s)
+                </span>
+              ) : pipelineStages.every(s => s.status === 'completed' || s.status === 'skipped') ? (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Completed
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                  Attention Needed
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPipelineStages(null)}
+              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+            {pipelineStages.map((stage, idx) => {
+              const isCompleted = stage.status === 'completed';
+              const isFailed = stage.status === 'failed';
+              return (
+                <div
+                  key={idx}
+                  className={`p-2.5 rounded-lg border text-xs transition-colors ${
+                    isCompleted
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                      : isFailed
+                      ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+                      : 'bg-amber-50/70 border-amber-200 text-amber-950'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className="capitalize">{stage.name.replace(/_/g, ' ')}</span>
+                    <span className="text-[11px]">
+                      {isCompleted ? '✓' : isFailed ? '✕' : '↷'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] mt-1 opacity-80">
+                    Status: <span className="font-medium capitalize">{stage.status}</span>
+                    {stage.duration_ms > 0 && ` (${Math.round(stage.duration_ms)}ms)`}
+                  </div>
+                  {stage.detail && (
+                    <div className="text-[10px] mt-1 truncate" title={stage.detail}>
+                      {stage.detail}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Extraction error notification */}
       {extractError && (
@@ -1407,7 +1654,20 @@ function TranscriptTab({
         )}
 
         <div className="pt-2 flex justify-end">
-          <Button onClick={onProcessed} size="sm" variant="secondary">
+          <Button
+            onClick={async () => {
+              if (hasUnsavedChanges && !saving && consultation?.id && text.trim()) {
+                try {
+                  await handleSave();
+                } catch {
+                  return;
+                }
+              }
+              onProcessed();
+            }}
+            size="sm"
+            variant="secondary"
+          >
             Next: Review SOAP Note →
           </Button>
         </div>
@@ -1474,6 +1734,19 @@ function SOAPTab({ consultation, onConsultationUpdated, onGoToTranscript, onGoTo
     if (!hasExtraction) {
       setError('Clinical information must be extracted before generating a SOAP draft. Please extract clinical information in the Transcript tab first.');
       return;
+    }
+
+    if (hasDraft) {
+      const isEdited = hasUnsavedChanges || Boolean(
+        consultation?.soap_draft?.updated_at &&
+        consultation?.soap_draft?.generated_at &&
+        new Date(consultation.soap_draft.updated_at).getTime() > new Date(consultation.soap_draft.generated_at).getTime()
+      );
+      if (isEdited) {
+        if (!window.confirm('This SOAP draft contains doctor edits. Regenerating will overwrite your custom changes with a fresh AI draft. Are you sure you want to proceed?')) {
+          return;
+        }
+      }
     }
 
     try {
@@ -1857,7 +2130,19 @@ function SOAPTab({ consultation, onConsultationUpdated, onGoToTranscript, onGoTo
                 ← Back to Transcript
               </Button>
               {onGoToVerification && (
-                <Button onClick={onGoToVerification} size="sm">
+                <Button
+                  onClick={async () => {
+                    if (hasUnsavedChanges && !saving && consultation?.id) {
+                      try {
+                        await handleSave();
+                      } catch {
+                        return;
+                      }
+                    }
+                    onGoToVerification();
+                  }}
+                  size="sm"
+                >
                   Next: Verify Claims & Conflicts →
                 </Button>
               )}
@@ -1956,9 +2241,14 @@ function VerificationTab({
 
   const handleResolve = async (itemId: string) => {
     if (!consultation?.id) return;
-    const text = resolutionText[itemId]?.trim() || 'Clinician confirmed and resolved discrepancy with patient.';
+    const text = (resolutionText[itemId] || '').trim();
+    if (!text) {
+      setError('Please enter a clinical resolution note before confirming resolution.');
+      return;
+    }
     try {
       setResolvingId(itemId);
+      setError(null);
       const updated = await api.resolveDiscrepancy(consultation.id, itemId, text);
       onConsultationUpdated(updated);
       setSuccess('Discrepancy resolved.');
@@ -2212,7 +2502,7 @@ function VerificationTab({
                         <Button
                           size="sm"
                           onClick={() => handleResolve(item.id)}
-                          disabled={resolvingId === item.id}
+                          disabled={resolvingId === item.id || !(resolutionText[item.id] || '').trim()}
                         >
                           {resolvingId === item.id ? 'Saving…' : 'Confirm Resolution'}
                         </Button>
@@ -2239,140 +2529,10 @@ function VerificationTab({
   );
 }
 
-
-function InlineVerifiedText({ text, section, activeSection, setActiveSection }: {
-  text: string; section: string; activeSection: string | null; setActiveSection: (s: string | null) => void;
-}) {
-  const claims = VERIFICATION_CLAIMS.filter(c => c.section === section);
-
-  const getClaimAtText = (fragment: string) => {
-    return claims.find(c =>
-      fragment.toLowerCase().includes(c.claim.toLowerCase().split(' ').slice(0, 3).join(' ').toLowerCase())
-    );
-  };
-
-  const words = text.split(/(\s+)/);
-  let highlighted = false;
-
-  return (
-    <div className="text-sm text-slate-700 leading-relaxed">
-      {text.split('. ').map((sentence, si) => {
-        const claim = getClaimAtText(sentence);
-        if (claim && !highlighted) {
-          highlighted = true;
-          return (
-            <span key={si}>
-              <span
-                className={`claim-highlight claim-${claim.status} rounded-sm px-0.5 cursor-pointer`}
-                title={`${claim.status.charAt(0).toUpperCase() + claim.status.slice(1)}: ${claim.evidence}`}
-                onClick={() => setActiveSection(activeSection === claim.id ? null : claim.id)}
-              >
-                {sentence}
-              </span>
-              {si < text.split('. ').length - 1 ? '. ' : ''}
-            </span>
-          );
-        }
-        return <span key={si}>{sentence}{si < text.split('. ').length - 1 ? '. ' : ''}</span>;
-      })}
-    </div>
-  );
-}
-
-function VerificationPanel({ supported, unsupported, ambiguous }: { supported: number; unsupported: number; ambiguous: number }) {
-  const [reviewedIds, setReviewedIds] = useState<string[]>([]);
-  const toggleReviewed = (id: string) => setReviewedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
-  return (
-    <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden sticky top-0">
-      <div className="p-4 border-b border-slate-100">
-        <div className="font-semibold text-slate-800 mb-3" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-          Verification Results
-        </div>
-        <div className="flex gap-2 text-xs">
-          <span className="px-2 py-1 bg-green-50 text-green-700 border border-green-200 rounded font-mono">✓ {supported} supported</span>
-          <span className="px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded font-mono">~ {ambiguous} ambiguous</span>
-          <span className="px-2 py-1 bg-red-50 text-red-700 border border-red-200 rounded font-mono">✕ {unsupported} unsupported</span>
-        </div>
-      </div>
-
-      <div className="max-h-[65vh] overflow-y-auto divide-y divide-slate-50">
-        {VERIFICATION_CLAIMS.map(claim => (
-          <div key={claim.id} className={`p-4 ${claim.status === 'unsupported' ? 'bg-red-50/30' : claim.status === 'ambiguous' ? 'bg-amber-50/30' : ''}`}>
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <p className="text-xs font-medium text-slate-800 leading-snug">{claim.claim}</p>
-              <VerifBadge status={claim.status as 'supported' | 'unsupported' | 'ambiguous'} />
-            </div>
-            <blockquote className="text-xs text-slate-500 italic border-l-2 border-slate-200 pl-2 leading-relaxed mb-2">
-              {claim.evidence}
-            </blockquote>
-            {claim.status === 'unsupported' && (
-              <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
-                ⚠ No transcript evidence. Verify before approving.
-              </div>
-            )}
-            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-500 hover:text-slate-700">
-              <input type="checkbox"
-                checked={reviewedIds.includes(claim.id)}
-                onChange={() => toggleReviewed(claim.id)}
-                className="w-3.5 h-3.5 accent-blue-600"
-              />
-              Mark as reviewed
-            </label>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ConflictsContent() {
-  return (
-    <div className="mt-4 space-y-3">
-      {CONFLICTS.map(c => (
-        <div key={c.id} className="bg-white rounded-lg border border-amber-100 overflow-hidden">
-          <div className="px-4 py-2 bg-amber-50/50 border-b border-amber-100">
-            <span className="text-xs font-semibold text-amber-800 font-mono-label uppercase">{c.field}</span>
-          </div>
-          <div className="grid grid-cols-2 divide-x divide-amber-100">
-            <div className="p-3">
-              <div className="text-xs text-slate-400 font-mono-label mb-1">Patient Intake</div>
-              <p className="text-xs text-slate-700 leading-relaxed">{c.intakeValue}</p>
-            </div>
-            <div className="p-3">
-              <div className="text-xs text-slate-400 font-mono-label mb-1">Consultation Record</div>
-              <p className="text-xs text-slate-700 leading-relaxed">{c.consultationValue}</p>
-            </div>
-          </div>
-          {c.resolution && (
-            <div className="px-4 py-2 bg-green-50 border-t border-green-100">
-              <div className="flex items-start gap-1.5 text-xs text-green-800">
-                <span>✓</span>
-                <span>{c.resolution}</span>
-              </div>
-            </div>
-          )}
-          {!c.resolution && c.severity === 'info' && (
-            <div className="px-4 py-2 bg-blue-50 border-t border-blue-100">
-              <div className="flex gap-2">
-                <button className="text-xs text-blue-700 font-medium hover:underline">Confirm Resolution</button>
-                <button className="text-xs text-red-600 font-medium hover:underline">Escalate</button>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-      <div className="flex items-center gap-1.5 text-xs text-green-700">
-        <span>✓</span> No further conflicts detected
-      </div>
-    </div>
-  );
-}
-
 // ── Record Tab ────────────────────────────────────────────────────────────────
 interface RecordTabProps {
   approved: boolean;
-  onApprove: () => void;
+  onApprove: (notes: string) => void;
   consultation: ConsultationResponse | null;
   doctorData: DoctorIntakeSummaryResponse | null;
   visits: ConsultationResponse[];
@@ -2388,37 +2548,64 @@ function RecordTab({
   patient,
 }: RecordTabProps) {
   const [checklist, setChecklist] = useState({
-    soap: true,
-    verification: true,
-    conflicts: true,
-    allergy: true,
+    soap: false,
+    verification: false,
+    conflicts: false,
+    allergy: false,
     prescription: false,
   });
+  const [doctorNotes, setDoctorNotes] = useState('');
   const [recordTab, setRecordTab] = useState('overview');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const allChecked = Object.values(checklist).every(Boolean);
 
   const toggle = (key: keyof typeof checklist) => {
     setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const isSarahDemo = patient.mrn === 'MRN-2026-0091' && (!consultation || consultation.patient_id === 'sarah-demo-id');
-  const claims = consultation?.verification_results?.claims && consultation.verification_results.claims.length > 0
-    ? consultation.verification_results.claims
-    : (isSarahDemo ? VERIFICATION_CLAIMS : []);
+  const handleDownloadPdf = async () => {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    setPdfError(null);
+    try {
+      const blob = await api.downloadPatientRecordPdf(patient.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `medscribe-${patient.mrn || patient.id}-record.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'PDF download failed.';
+      setPdfError(msg);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
-  const compItems = consultation?.comparison_results?.items && consultation.comparison_results.items.length > 0
-    ? consultation.comparison_results.items
-    : (isSarahDemo ? CONFLICTS : []);
+  const claims = consultation?.verification_results?.claims || [];
+  const compItems = consultation?.comparison_results?.items || [];
 
   const confirmedAllergies = useMemo(() => {
-    const list: { substance: string; reaction: string; source: 'patient-reported' | 'doctor-confirmed'; firstSeen?: string }[] = [];
+    const list: { substance: string; reaction: string; source: 'patient-reported' | 'doctor-confirmed' | 'needs-confirmation' | 'ai-generated'; firstSeen?: string }[] = [];
     if (consultation?.extracted_clinical_data?.allergies) {
       for (const a of consultation.extracted_clinical_data.allergies) {
         if (isClinicalAllergy(a.substance)) {
+          // An allergy is only doctor-confirmed if explicitly confirmed in discrepancy resolutions
+          const hasDoctorConfirmation = Boolean(
+            consultation.comparison_results?.items?.some(it =>
+              it.category === 'allergies' &&
+              it.consultation_value?.toLowerCase().includes(a.substance.toLowerCase()) &&
+              it.resolution && !it.discrepancy
+            )
+          );
           list.push({
             substance: a.substance,
             reaction: a.reaction || 'Explicitly reported allergy',
-            source: 'doctor-confirmed',
+            source: hasDoctorConfirmation ? 'doctor-confirmed' : 'needs-confirmation',
             firstSeen: formatVisitDate(consultation.created_at),
           });
         }
@@ -2477,7 +2664,7 @@ function RecordTab({
       for (const m of consultation.extracted_clinical_data.medications) {
         const drug = `${m.name} ${m.dose || ''} ${m.frequency || ''}`.trim();
         const date = formatVisitDate(consultation.created_at);
-        const status = m.status || 'Active';
+        const status = m.status || 'Not documented';
         if (isDoctorPrescribed(m.name)) {
           rxList.push({ drug, date, status, source: 'doctor-confirmed' });
         } else {
@@ -2538,7 +2725,7 @@ function RecordTab({
     if (allergiesSet.size > 0) {
       result.push({
         category: 'Allergies',
-        facts: Array.from(allergiesSet).map(f => ({ fact: f, sources: ['doctor-confirmed'] as const, date: 'Documented across visits' }))
+        facts: Array.from(allergiesSet).map(f => ({ fact: f, sources: ['needs-confirmation'] as const, date: 'Documented across visits' }))
       });
     }
     if (diagnosesSet.size > 0) {
@@ -2608,7 +2795,7 @@ function RecordTab({
                   Doctor-Approved · Final Medical Record
                 </div>
                 <div className="text-xs text-green-700 mt-0.5">
-                  Approved by {consultation?.final_record?.doctor_name || 'Dr. J. Patel'} on {approvalTimestamp} · Provenance: doctor-approved-final-record
+                  Approved by {consultation?.final_record?.doctor_name || '—'} on {approvalTimestamp} · Provenance: doctor-approved-final-record
                 </div>
               </div>
             </div>
@@ -2763,7 +2950,7 @@ function RecordTab({
                         <td className="px-4 py-3 text-slate-800 font-medium">
                           {v.soap_draft?.assessment || (v.extracted_clinical_data?.diagnoses?.join(', ') || 'Pending')}
                         </td>
-                        <td className="px-4 py-3 text-slate-500 text-xs">Dr. J. Patel</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{visitDoctorLabel(v)}</td>
                         <td className="px-4 py-3">
                           {v.status === 'in-progress'
                             ? <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-medium">Active</span>
@@ -2878,14 +3065,44 @@ function RecordTab({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">Source-annotated longitudinal view of confirmed facts across all visits for this patient.</p>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border ${
-                isCurrentVisitFinalized
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
-              }`}>
-                {isCurrentVisitFinalized ? 'Doctor-Approved Final Record' : 'Active Consultation · Draft State'}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border ${
+                  isCurrentVisitFinalized
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  {isCurrentVisitFinalized ? 'Doctor-Approved Final Record' : 'Active Consultation · Draft State'}
+                </span>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={pdfLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
+                  title="Download complete patient longitudinal record as PDF"
+                >
+                  {pdfLoading ? (
+                    <>
+                      <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Generating PDF…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download Patient Record (PDF)
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+            {pdfError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                PDF download failed: {pdfError}
+              </div>
+            )}
 
             {!isCurrentVisitFinalized && (
               <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
@@ -2987,6 +3204,19 @@ function RecordTab({
               ))}
             </div>
 
+            <div className="mb-3">
+              <label className="text-xs font-medium text-slate-700 block mb-1">
+                Doctor notes (optional)
+              </label>
+              <textarea
+                value={doctorNotes}
+                onChange={e => setDoctorNotes(e.target.value)}
+                placeholder="Add any final clinical observations, caveats, or follow-up notes..."
+                rows={2}
+                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
             {!allChecked && (
               <div className="text-xs text-slate-400 mb-3 text-center">
                 Complete all items to approve
@@ -3000,7 +3230,7 @@ function RecordTab({
             )}
 
             <Button
-              onClick={onApprove}
+              onClick={() => onApprove(doctorNotes)}
               disabled={!allChecked}
               className="w-full"
               size="md"

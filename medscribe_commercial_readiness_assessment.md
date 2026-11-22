@@ -296,10 +296,10 @@ pie title Gap Analysis: What's Missing for Commercial Readiness
 | Task | File(s) | Acceptance Criteria | Definition of Done | Status |
 |:---|:---|:---|:---|:---:|
 | **0.1** Initialize Git | Root | `git log` shows initial commit | All current working code is safeguarded | ✅ **Completed** |
-| **0.2** Add 429 retry to normalization | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py) | `pytest backend/tests` → 41/41 pass in single batch | Rate-limited translation retries before falling back | ⏳ Pending |
-| **0.3** Fix age calculation | [summary_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py#L175) | Any DOB renders correct current age | Dynamic date math replaces hardcoded check | ⏳ Pending |
-| **0.4** Add failure signal to normalization | normalization_service.py | Doctor-facing UI shows ⚠️ when translation was skipped | Return metadata indicating fallback was used | ⏳ Pending |
-| **0.5** Remove deprecated stubs | [stubs.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/stubs.py) | No 501 routes remain | Clean API surface | ⏳ Pending |
+| **0.2** Add 429 retry to normalization | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py) | `pytest backend/tests` → 44/44 pass in single batch | Rate-limited translation retries before falling back | ✅ **Completed** |
+| **0.3** Fix age calculation | [summary_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py#L175) | Any DOB renders correct current age | Dynamic date math replaces hardcoded check | ✅ **Completed** |
+| **0.4** Add failure signal to normalization | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py) | Doctor-facing UI shows ⚠️ when translation was skipped | Return metadata indicating fallback was used | ✅ **Completed** |
+| **0.5** Remove deprecated stubs | [stubs.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/stubs.py) | No 501 routes remain | Clean API surface | ✅ **Completed** |
 
 ---
 
@@ -475,30 +475,107 @@ The path forward is clear: stabilize → secure → complete Module 3 → deploy
 | Milestone / Task | Status | Completion Date | Evidence / Artifacts |
 |:---|:---:|:---:|:---|
 | **0.1 Initialize Git & Project Repo** | ✅ **COMPLETED** | Oct 14, 2026 | Git repository initialized, `.gitignore` configured, comprehensive `README.md` added, remote connected to `https://github.com/PrakharGupta04/medscribe-verify` |
-| **0.2 Add 429 Retry to Normalization** | ⏳ Pending | Next | `backend/app/services/normalization_service.py` |
-| **0.3 Fix Age Calculation** | ⏳ Pending | Next | `backend/app/services/summary_service.py` |
-| **0.4 Add Failure Signal to Normalization** | ⏳ Pending | Next | `normalization_service.py` metadata & UI notification |
-| **0.5 Remove Deprecated Stubs** | ⏳ Pending | Next | `stubs.py` decommission & route unbinding |
+| **0.2 Add 429 Retry to Normalization** | ✅ **COMPLETED** | Oct 20, 2026 | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py) — 4-attempt retry loop with dynamic backoff parsing |
+| **0.3 Fix Age Calculation** | ✅ **COMPLETED** | Oct 20, 2026 | [summary_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py) — Dynamic `calculate_age` supporting multi-format DOBs |
+| **0.4 Add Failure Signal to Normalization** | ✅ **COMPLETED** | Oct 20, 2026 | [normalization_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/normalization_service.py), [schemas/doctor.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/schemas/doctor.py), [PatientOverview.tsx](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/Frontend/src/components/doctor/PatientOverview.tsx) — UI `⚠️ Language Notice` banner & metadata |
+| **0.5 Remove Deprecated Stubs** | ✅ **COMPLETED** | Oct 20, 2026 | Decommissioned `stubs.py`, cleaned [main.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/main.py) and [routes/__init__.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/__init__.py) |
 
-#### Summary of Actions Completed for Phase 0.1:
-1. **Repository Setup & Version Control Safeguard**:
-   - Initialized local Git repository tracking all production code, schemas, services, tests, and configuration.
-   - Bound remote repository: `origin` pointing to `https://github.com/PrakharGupta04/medscribe-verify.git`.
-2. **Environment & Artifact Protection (`.gitignore`)**:
-   - Explicitly excluded all secrets and keys (`.env`, `.env.*`) while whitelisting `.env.example`.
-   - Prevented accidental commit of virtual environment files (`.medscribe/`, `.venv/`, `venv/`).
-   - Prevented commit of local SQLite databases and lock/WAL files (`*.db`, `*.sqlite`, `*.sqlite3`, `*.db-wal`, `*.db-shm`).
-   - Ignored large audio recordings (`*.wav`, `*.mp3`, `*.m4a`) and test generation scripts (`gen_*.vbs`).
-   - Excluded `Frontend/node_modules/` and build directories (`dist/`).
-   - Excluded temporary scratch scripts (`scratch/`).
-3. **Commit-Ready Documentation (`README.md`)**:
-   - Formatted and generated the main project `README.md` documenting:
-     - The overarching vision and doctor-supervised clinical philosophy.
-     - Architecture breakdown for Modules 1, 2, and 3.
-     - Clinical safety invariants (sentinel values, 4-tier provenance tracking, claim verification engine, doctor approval gate, visit isolation).
-     - Step-by-step setup and running instructions for both FastAPI backend and React frontend.
-     - Test suite execution instructions (`pytest backend/tests`).
-     - Direct linkage to this commercial readiness assessment.
-4. **Safety & Stability Audit**:
-   - Verified that `stubs.py` and existing route imports remain functional until task 0.5 is deliberately executed.
-   - Verified that all clinical tests remain runnable and intact.
+---
+
+#### 13.1 Detailed Technical Documentation for Phase 0
+
+#### Task 0.1: Git Repository & Workspace Safeguards
+- **Problem & Rationale:** Prior to Phase 0, the repository was unversioned with zero recovery checkpoints, putting weeks of development at risk of accidental corruption.
+- **Approach & Tech:** Initialized Git VCS, constructed an exhaustive `.gitignore` guarding secrets (`.env`), Python venvs, SQLite databases (`*.db`, `*.sqlite3`), and temporary artifacts. Authored a production-grade `README.md` detailing the clinical verification architecture.
+- **Outcome:** Working tree established and tracked on `origin/main` (`https://github.com/PrakharGupta04/medscribe-verify`).
+
+---
+
+#### Task 0.2: 429 Rate-Limit Exponential Backoff in Clinical Normalization
+- **The Problem / Clinical Risk:** During multi-test batch runs or high-throughput clinical check-ins, calls to Groq Cloud API frequently encountered HTTP 429 ("Too Many Requests"). Because `normalization_service.py` lacked retry logic, it swallowed the 429 error and silently fell back to returning untranslated Devanagari Hindi or Hinglish text. This caused 2/41 tests in `test_multilingual_voice.py` to fail intermittently.
+- **Why It Matters:** Clinical Safety Invariant #5 dictates that translation failures must not silently degrade the intake record. If a patient inputs crucial allergy data in Hindi (e.g., "पेनिसिलिन से गंभीर एलर्जी") and rate limits trigger silent fallback, downstream English rule engines might fail to screen the allergy.
+- **Tech Used:**
+  - `httpx.Client(timeout=30.0)` for synchronous HTTP request management.
+  - Python standard library `re` for regex extraction of server backoff recommendations.
+  - `time.sleep()` for non-blocking backoff pauses between attempts.
+- **Implementation Approach & How It Works:**
+  - Mirrored the proven retry loop from `extraction_service.py:L103-122` and `soap_service.py:L100-119`.
+  - Added a 4-attempt retry loop (`for attempt in range(4)`) inside `normalize_to_clinical_english_with_status()`.
+  - On HTTP 429, the system parses the error response body with `re.search(r"try again in ([0-9.]+)s", err_msg)`. If found, it sleeps for the server-requested duration plus a 0.5s safety buffer; otherwise it applies graduated exponential backoff (`4.0 + (attempt * 2.0)` seconds).
+  - Increased network timeout from 15.0s to 30.0s to accommodate model latency under load.
+- **Outcome & Evidence:**
+  - `pytest backend/tests/test_multilingual_voice.py` previously failed 2 tests under rate limiting; now all tests pass deterministically.
+  - Full suite batch run passed 44/44 tests in a single continuous execution.
+
+---
+
+#### Task 0.3: Dynamic Multi-Format Clinical Age Calculation
+- **The Problem / Clinical Risk:** In [summary_service.py:L175](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py#L175), patient age was calculated via a hardcoded ternary check:
+  ```python
+  age="28" if "1998" in (patient.dob or "") else ("—" if not patient.dob else patient.dob)
+  ```
+  Patients born in any year other than 1998 had their raw DOB string (e.g., `"1990-08-15"`) displayed as their age in the clinical summary.
+- **Why It Matters:** Accurate age calculation is a mandatory clinical demographic requirement. Age dictates pediatric vs. geriatric medication dosing thresholds, differential diagnosis prioritization, and clinical risk scores.
+- **Tech Used:**
+  - Python `datetime` module for leap-year-safe calendar arithmetic.
+  - Regular expressions for lenient 4-digit birth-year fallback.
+- **Implementation Approach & How It Works:**
+  - Built a standalone, pure function `calculate_age(dob_str: Optional[str]) -> str`.
+  - Supports ISO-8601 and clinical standard date formats: `%Y-%m-%d`, `%d-%m-%Y`, `%d/%m/%Y`, `%Y/%m/%d`, `%d.%m.%Y`, `%Y.%m.%d`.
+  - Performs precise day-of-year comparison:
+    ```python
+    years = today.year - parsed_date.year - ((today.month, today.day) < (parsed_date.month, parsed_date.day))
+    return str(max(0, years))
+    ```
+  - Includes a regex fallback for year-only inputs (`\b(19\d\d|20\d\d)\b`) and gracefully returns `" — "` for missing, empty, or unparseable inputs.
+  - Refactored `summary_service.py` demographics instantiation to call `calculate_age(patient.dob)`.
+- **Outcome & Evidence:**
+  - Validated by unit test `test_calculate_age_dynamic` testing standard dates, leap days, year-only strings, slash formatting, and boundary edge cases.
+
+---
+
+#### Task 0.4: Normalization Failure Signaling & Doctor Alerting
+- **The Problem / Clinical Risk:** When clinical normalization to English fails (due to persistent rate-limiting, network disconnection, or missing API credentials), the system silently persisted raw Devanagari text without notifying the clinician. The doctor had no indication that automated translation had been skipped.
+- **Why It Matters:** Clinical safety invariant #5 ("AI failures must be visible, not silent"). Clinicians must be immediately aware that a patient's self-reported fields contain untranslated source text so they can perform verbal reconciliation or request translation assistance during the consult.
+- **Tech Used:**
+  - Python typing `Tuple[str, bool]`.
+  - FastAPI Pydantic v2 schemas (`PreConsultationSummary`).
+  - TypeScript interfaces (`PreConsultationSummary` in `Frontend/src/types/intake.ts`).
+  - React 19 UI component alert banner in `PatientOverview.tsx`.
+- **Implementation Approach & How It Works:**
+  1. **Service Decoupling:** Implemented `normalize_to_clinical_english_with_status(text) -> Tuple[str, bool]`, returning `(result_text, fallback_used)`. The existing `normalize_to_clinical_english(text)` function wraps this for 100% backward compatibility.
+  2. **Intake Persistence:** In [intake_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/intake_service.py), normalization calls record whether any field fell back. If so, `adaptive_payload["__normalization_fallback__"] = True` is persisted in `IntakeData.adaptive_responses`.
+  3. **Summary Propagation:** [summary_service.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/services/summary_service.py) inspects the fallback flag and also runs a heuristic check with `is_hindi_or_hinglish()` across `medications`, `allergies`, and `additional_notes`. If untranslated text is detected, it populates:
+     - `translation_fallback = True`
+     - `translation_warning = "⚠️ Translation to English was skipped or unavailable for some patient-reported responses. Raw patient text is displayed."`
+  4. **Schema Updates:** Added `translation_fallback: bool = False` and `translation_warning: Optional[str] = None` to `PreConsultationSummary` in both Python schemas and TypeScript interfaces.
+  5. **Doctor UI Notification:** In [PatientOverview.tsx:L530-536](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/Frontend/src/components/doctor/PatientOverview.tsx#L530-L536), added a dedicated amber language warning banner positioned directly beneath the clinical notice and allergy alerts.
+- **Outcome & Evidence:**
+  - Validated by end-to-end integration test `test_normalization_fallback_signal`, simulating network outage via `monkeypatch`, confirming metadata presence in `GET /api/doctor/intake/{queue_id}`.
+
+---
+
+#### Task 0.5: Decommissioning Deprecated 501 Stubs
+- **The Problem & Rationale:** Early prototypes included `stubs.py` defining three placeholder endpoints returning HTTP 501 (`POST /api/consultation/transcript`, `GET /api/verification/claims/{id}`, `POST /api/records/{id}/approve`). With Module 2 fully implemented in `consultations.py` (`POST /api/consultations`, `PUT /api/consultations/{id}/transcript`, `POST /api/consultations/{id}/finalize`), these stubs created dead code, polluted the OpenAPI documentation, and presented route ambiguity.
+- **Approach & Tech:**
+  - Deleted [backend/app/api/routes/stubs.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/stubs.py).
+  - Removed `stubs_router` import and registration from [backend/app/main.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/main.py).
+  - Updated [backend/app/api/routes/__init__.py](file:///c:/Users/praba/OneDrive/Desktop/Medscribe/backend/app/api/routes/__init__.py) to export `consultations_router` in place of `stubs_router`.
+- **Outcome & Evidence:**
+  - Verified by regression test `test_deprecated_stubs_removed`, ensuring legacy endpoints return HTTP 404 Not Found rather than 501 Not Implemented. Clean OpenAPI spec.
+
+---
+
+### Phase 0 Verification & Test Suite Summary
+
+- **Baseline Pre-Phase 0 Status:** 39 passed, 2 failed (41 total tests; 2 rate-limiting failures in `test_multilingual_voice.py`).
+- **Post-Phase 0 Status:** **44 passed, 0 failed (44 total tests)** across the entire test suite in a single batch run (160.53s):
+  - `test_agentic_workflow.py`: 4 passed
+  - `test_consultation.py`: 11 passed
+  - `test_health.py`: 1 passed
+  - `test_intake.py`: 9 passed
+  - `test_multilingual_voice.py`: 9 passed (including 3 new Phase 0 validation tests)
+  - `test_patient_isolation.py`: 4 passed
+  - `test_provenance_review.py`: 3 passed
+  - `test_queue.py`: 3 passed
+- **Quality Gate:** Zero regressions, zero 501 endpoints, 100% test pass rate. Phase 0 is officially complete and ready to advance to Phase 1 (Security Foundation).

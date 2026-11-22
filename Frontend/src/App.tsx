@@ -15,6 +15,8 @@ type AppScreen =
 export default function App() {
   const [screen, setScreen] = useState<AppScreen>('landing');
   const [navActive, setNavActive] = useState('queue');
+  const [doctorName, setDoctorName] = useState<string>('');
+  const [pendingDoctorScreen, setPendingDoctorScreen] = useState<AppScreen | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>();
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
   const [returningPatient, setReturningPatient] = useState<{
@@ -30,6 +32,12 @@ export default function App() {
     setScreen('doctor-queue');
   };
 
+  const handleLogout = () => {
+    setDoctorName('');
+    setPendingDoctorScreen(null);
+    setScreen('landing');
+  };
+
   if (screen === 'patient-flow') {
     return (
       <PatientFlow
@@ -38,19 +46,37 @@ export default function App() {
           setReturningPatient(undefined);
           setSelectedPatientId(patientId);
           setSelectedSessionId(sessionId);
-          setScreen(patientId ? 'doctor-patient' : 'doctor-queue');
+          const targetScreen: AppScreen = patientId ? 'doctor-patient' : 'doctor-queue';
+          if (!doctorName) {
+            setPendingDoctorScreen(targetScreen);
+            setScreen('doctor-login');
+          } else {
+            setScreen(targetScreen);
+          }
         }}
       />
     );
   }
 
   if (screen === 'doctor-login') {
-    return <DoctorLogin onLogin={() => setScreen('doctor-queue')} />;
+    return (
+      <DoctorLogin
+        onLogin={(name) => {
+          setDoctorName(name);
+          if (pendingDoctorScreen) {
+            setScreen(pendingDoctorScreen);
+            setPendingDoctorScreen(null);
+          } else {
+            setScreen('doctor-queue');
+          }
+        }}
+      />
+    );
   }
 
   if (screen === 'doctor-queue') {
     return (
-      <DoctorLayout activeNav={navActive} onNav={handleNav} onLogout={() => setScreen('landing')}>
+      <DoctorLayout activeNav={navActive} onNav={handleNav} doctorName={doctorName} onLogout={handleLogout}>
         <PatientQueue
           onOpenPatient={(patientId, sessionId) => {
             setSelectedPatientId(patientId);
@@ -64,10 +90,12 @@ export default function App() {
 
   if (screen === 'doctor-patient') {
     return (
-      <DoctorLayout activeNav={navActive} onNav={handleNav} onLogout={() => setScreen('landing')}>
+      <DoctorLayout activeNav={navActive} onNav={handleNav} doctorName={doctorName} onLogout={handleLogout}>
         <PatientOverview
+          key={`${selectedPatientId || ''}-${selectedSessionId || ''}`}
           patientId={selectedPatientId}
           sessionId={selectedSessionId}
+          doctorName={doctorName}
           onBack={() => setScreen('doctor-queue')}
           onStartNewVisit={(patient) => {
             setReturningPatient(patient);
@@ -77,7 +105,6 @@ export default function App() {
       </DoctorLayout>
     );
   }
-
 
   // Landing / demo navigation
   return (

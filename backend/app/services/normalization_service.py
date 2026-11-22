@@ -1,5 +1,6 @@
 import re
-from typing import Optional
+import time
+from typing import Optional, Tuple
 import httpx
 
 from backend.app.core.config import settings
@@ -32,62 +33,92 @@ def is_hindi_or_hinglish(text: str) -> bool:
     return len(matches) >= 1
 
 
+def normalize_to_clinical_english_with_status(text: Optional[str]) -> Tuple[str, bool]:
+    """
+    Converts Hindi or Hinglish patient input into clean clinical English.
+    Returns (result_text, fallback_used).
+    fallback_used is True if the text required translation (was Hindi/Hinglish) but
+    translation failed (e.g. repeated rate limits, network outage, or missing API key),
+    resulting in a fallback to the raw untranslated text.
+    """
+    if not text or not text.strip():
+        return ("", False)
+
+    raw_text = text.strip()
+
+    # Fast path: If purely ASCII and no Hinglish markers, return original text as-is
+    if not is_hindi_or_hinglish(raw_text):
+        return (raw_text, False)
+
+    if not settings.GROQ_API_KEY:
+        return (raw_text, True)
+
+    payload = {
+        "model": TRANSLATION_MODEL,
+        "temperature": 0.1,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a medical intake translation assistant. Translate patient-reported "
+                    "text from Hindi (Devanagari) or Hinglish (Romanized Hindi) into clean, "
+                    "standard clinical English. If the input is already in English, output it unchanged. "
+                    "Do not add medical advice, diagnoses, conversational filler, markdown formatting, "
+                    "or quotes. Output ONLY the clean clinical English translation."
+                ),
+            },
+            {"role": "user", "content": raw_text},
+        ],
+    }
+
+    try:
+        resp = None
+        for attempt in range(4):
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    GROQ_CHAT_URL,
+                    headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+                    json=payload,
+                )
+            if resp.status_code == 429 and attempt < 3:
+                wait_sec = 4.0 + (attempt * 2.0)
+                try:
+                    err_data = resp.json()
+                    err_msg = err_data.get("error", {}).get("message", "")
+                    match = re.search(r"try again in ([0-9.]+)s", err_msg)
+                    if match:
+                        wait_sec = float(match.group(1)) + 0.5
+                except Exception:
+                    pass
+                time.sleep(wait_sec)
+                continue
+            break
+
+        if resp is not None and resp.status_code == 200:
+            data = resp.json()
+            translated = data["choices"][0]["message"]["content"].strip()
+            # Clean any accidental outer quotes if model wrapped output
+            if (translated.startswith('"') and translated.endswith('"')) or (
+                translated.startswith("'") and translated.endswith("'")
+            ):
+                translated = translated[1:-1].strip()
+            if translated:
+                return (translated, False)
+
+        return (raw_text, True)
+    except Exception:
+        # Fall back to raw text on any communication failure
+        return (raw_text, True)
+
+
 def normalize_to_clinical_english(text: Optional[str]) -> str:
     """
     Converts Hindi or Hinglish patient input into clean clinical English.
     If text is already English, it returns the input unchanged.
     Never raises an exception; falls back gracefully to original text.
     """
-    if not text or not text.strip():
-        return ""
-
-    raw_text = text.strip()
-
-    # Fast path: If purely ASCII and no Hinglish markers, return original text as-is
-    if not is_hindi_or_hinglish(raw_text):
-        return raw_text
-
-    if not settings.GROQ_API_KEY:
-        return raw_text
-
-    try:
-        payload = {
-            "model": TRANSLATION_MODEL,
-            "temperature": 0.1,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a medical intake translation assistant. Translate patient-reported "
-                        "text from Hindi (Devanagari) or Hinglish (Romanized Hindi) into clean, "
-                        "standard clinical English. If the input is already in English, output it unchanged. "
-                        "Do not add medical advice, diagnoses, conversational filler, markdown formatting, "
-                        "or quotes. Output ONLY the clean clinical English translation."
-                    ),
-                },
-                {"role": "user", "content": raw_text},
-            ],
-        }
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.post(
-                GROQ_CHAT_URL,
-                headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
-                json=payload,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                translated = data["choices"][0]["message"]["content"].strip()
-                # Clean any accidental outer quotes if model wrapped output
-                if (translated.startswith('"') and translated.endswith('"')) or (
-                    translated.startswith("'") and translated.endswith("'")
-                ):
-                    translated = translated[1:-1].strip()
-                return translated if translated else raw_text
-    except Exception:
-        # Fall back to raw text on any communication failure
-        return raw_text
-
-    return raw_text
+    result, _ = normalize_to_clinical_english_with_status(text)
+    return result
 
 
 def transcribe_audio_groq(

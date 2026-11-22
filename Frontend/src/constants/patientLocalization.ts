@@ -19,6 +19,9 @@ export interface LocalizationDictionary {
   fullNameLabel: string;
   fullNamePlaceholder: string;
   dobLabel: string;
+  genderLabel: string;
+  genderPlaceholder: string;
+  genderOptions: Record<string, string>;
   phoneLabel: string;
   phonePlaceholder: string;
   nameError: string;
@@ -58,6 +61,7 @@ export interface LocalizationDictionary {
   reviewLabels: {
     name: string;
     dob: string;
+    gender: string;
     phone: string;
     complaint: string;
     duration: string;
@@ -93,7 +97,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     welcomeDesc: 'Please complete your pre-consultation form. Your responses help your doctor prepare for your visit.',
     startCheckIn: 'Start Check-In',
     startingCheckIn: 'Starting Check-In…',
-    privateNote: 'Private and encrypted. Your information goes directly to your doctor.',
+    privateNote: 'Your information goes directly to your doctor. This is a demonstration build, so please do not enter real patient data.',
     qrScanNote: 'Scan from your own device to complete the form on your phone',
     poweredBy: 'Powered by Medscribe-Verify',
 
@@ -102,12 +106,21 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNameLabel: 'Full name',
     fullNamePlaceholder: 'e.g. Sarah Miller',
     dobLabel: 'Date of birth',
+    genderLabel: 'Gender',
+    genderPlaceholder: 'Select gender',
+    genderOptions: {
+      'Male': 'Male',
+      'Female': 'Female',
+      'Non-binary': 'Non-binary',
+      'Other': 'Other',
+      'Prefer not to say': 'Prefer not to say',
+    },
     phoneLabel: 'Phone number (optional)',
-    phonePlaceholder: '+44 7700 000 000',
+    phonePlaceholder: '+91 98765 43210',
     nameError: 'Please enter your name.',
     continueBtn: 'Continue →',
     backBtn: '← Back',
-    privateEncrypted: 'This session is private and encrypted.',
+    privateEncrypted: 'Demonstration build: sessions are not encrypted or audited.',
 
     symptomsTitle: 'What brings you in today?',
     symptomsDesc: "Select all that apply. We'll ask follow-up questions based on your selection.",
@@ -225,6 +238,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     reviewLabels: {
       name: 'Name',
       dob: 'Date of Birth',
+      gender: 'Gender',
       phone: 'Phone',
       complaint: 'Chief Complaint',
       duration: 'Duration',
@@ -261,7 +275,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     welcomeDesc: 'कृपया अपना परामर्श-पूर्व फॉर्म भरें। आपके उत्तर डॉक्टर को आपकी जांच की तैयारी में मदद करते हैं।',
     startCheckIn: 'चेक-इन शुरू करें',
     startingCheckIn: 'चेक-इन शुरू हो रहा है…',
-    privateNote: 'सुरक्षित और गोपनीय। आपकी जानकारी सीधे आपके डॉक्टर के पास जाती है।',
+    privateNote: 'आपकी जानकारी सीधे आपके डॉक्टर तक पहुँचती है। यह डेमो संस्करण है, कृपया वास्तविक मरीज़ का डेटा दर्ज न करें।',
     qrScanNote: 'अपने मोबाइल पर फॉर्म भरने के लिए इस कोड को स्कैन करें',
     poweredBy: 'पावर्ड बाय मेडस्क्राइब-वेरीफाई',
 
@@ -270,12 +284,21 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNameLabel: 'पूरा नाम',
     fullNamePlaceholder: 'उदा. राहुल शर्मा',
     dobLabel: 'जन्म तिथि',
+    genderLabel: 'लिंग (Gender)',
+    genderPlaceholder: 'लिंग चुनें',
+    genderOptions: {
+      'Male': 'पुरुष (Male)',
+      'Female': 'महिला (Female)',
+      'Non-binary': 'नॉन-बाइनरी (Non-binary)',
+      'Other': 'अन्य (Other)',
+      'Prefer not to say': 'बताना नहीं चाहते (Prefer not to say)',
+    },
     phoneLabel: 'फ़ोन नंबर (वैकल्पिक)',
     phonePlaceholder: '+91 98765 43210',
     nameError: 'कृपया अपना नाम दर्ज करें।',
     continueBtn: 'आगे बढ़ें →',
     backBtn: '← वापस',
-    privateEncrypted: 'यह सत्र पूरी तरह निजी और सुरक्षित (एन्क्रिप्टेड) है।',
+    privateEncrypted: 'डेमो संस्करण: सत्र एन्क्रिप्टेड या ऑडिट किए हुए नहीं हैं।',
 
     symptomsTitle: 'आज आप किस समस्या के लिए आए हैं?',
     symptomsDesc: 'जो भी लक्षण हों उन्हें चुनें। आपके चयन के आधार पर हम कुछ आसान सवाल पूछेंगे।',
@@ -393,6 +416,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     reviewLabels: {
       name: 'नाम',
       dob: 'जन्म तिथि',
+      gender: 'लिंग (Gender)',
       phone: 'फ़ोन नंबर',
       complaint: 'मुख्य समस्या',
       duration: 'अवधि',
@@ -429,7 +453,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     welcomeDesc: 'Kripya apna pre-consultation form complete karein. Isse doctor ko aapki visit ke liye prepare karne me madad milti hai.',
     startCheckIn: 'Check-In Shuru Karein',
     startingCheckIn: 'Check-In Shuru Ho Raha Hai…',
-    privateNote: 'Private aur encrypted. Aapki information direct doctor ke paas secure tarike se jayegi.',
+    privateNote: 'Aapki information seedhe doctor tak jati hai. Yeh demo build hai, isliye real patient data enter na karein.',
     qrScanNote: 'Apne mobile se scan karke phone par form complete karein',
     poweredBy: 'Powered by Medscribe-Verify',
 
@@ -438,12 +462,21 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNameLabel: 'Full name (Pura naam)',
     fullNamePlaceholder: 'Jaise: Rahul Sharma',
     dobLabel: 'Date of birth (Janam tithi)',
+    genderLabel: 'Gender (Ling)',
+    genderPlaceholder: 'Select gender karein',
+    genderOptions: {
+      'Male': 'Male (Purush)',
+      'Female': 'Female (Mahila)',
+      'Non-binary': 'Non-binary',
+      'Other': 'Other (Anya)',
+      'Prefer not to say': 'Batana nahi chahte (Prefer not to say)',
+    },
     phoneLabel: 'Phone number (Optional)',
     phonePlaceholder: '+91 98765 43210',
     nameError: 'Kripya apna naam enter karein.',
     continueBtn: 'Aage Badhein →',
     backBtn: '← Peeche',
-    privateEncrypted: 'Yeh session private aur encrypted hai.',
+    privateEncrypted: 'Demo build: sessions encrypted ya audited nahi hain.',
 
     symptomsTitle: 'Aaj kya takleef hai?',
     symptomsDesc: 'Jo symptoms hain unhe select karein. Hum aage kuch simple follow-up sawal sochenge.',
@@ -528,7 +561,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     symptomLabels: {
       diff_swallow: 'Nigalne me dikkat',
       ear_pain: 'Kaan me dard',
-      runny_nose: 'Naak behna / z जुकाम',
+      runny_nose: 'Naak behna / Zukam',
       chills: 'Thand lagna (Chills)',
       rash: 'Chakatte ya rash',
       nausea: 'Ulti jaisa lagna (Nausea)',
@@ -561,6 +594,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     reviewLabels: {
       name: 'Naam',
       dob: 'Date of Birth',
+      gender: 'Gender (Ling)',
       phone: 'Phone',
       complaint: 'Mukhya Complaint',
       duration: 'Kitne din se',
