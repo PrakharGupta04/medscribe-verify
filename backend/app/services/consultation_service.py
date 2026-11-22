@@ -503,6 +503,18 @@ def resolve_discrepancy(
             detail=f"Consultation with ID '{consultation_id}' not found.",
         )
 
+    if consultation.final_record or consultation.finalized_at or consultation.status in ("completed", "finalized"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot resolve discrepancies on a finalized consultation.",
+        )
+
+    if not resolution or not resolution.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resolution note cannot be empty. A doctor clinical resolution is required.",
+        )
+
     if not consultation.comparison_results:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -568,8 +580,11 @@ def finalize_consultation(
     patient_mrn = patient.mrn if patient else f"MRN-{consultation.patient_id[:8]}"
 
     # Guard against accidental repeated approval: preserve existing doctor-approved final record
-    if consultation.final_record and consultation.status in ("completed", "finalized"):
-        return consultation
+    if consultation.final_record and (consultation.finalized_at or consultation.status in ("completed", "finalized")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Consultation has already been finalized and approved. Cannot approve again.",
+        )
 
     from backend.app.schemas.consultation import FinalMedicalRecord, SoapDraft
 

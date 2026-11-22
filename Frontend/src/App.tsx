@@ -92,6 +92,7 @@ export default function App() {
     return (
       <DoctorLayout activeNav={navActive} onNav={handleNav} doctorName={doctorName} onLogout={handleLogout}>
         <PatientOverview
+          key={`${selectedPatientId || ''}-${selectedSessionId || ''}`}
           patientId={selectedPatientId}
           sessionId={selectedSessionId}
           doctorName={doctorName}

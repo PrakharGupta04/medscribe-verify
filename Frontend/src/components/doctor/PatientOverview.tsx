@@ -43,19 +43,43 @@ function visitDoctorLabel(v?: ConsultationResponse | null): string {
 export function isClinicalAllergy(text?: string | null): boolean {
   if (!text) return false;
   const lower = text.trim().toLowerCase();
-  if (
-    lower === 'none' ||
-    lower === 'none reported' ||
-    lower === 'n/a' ||
-    lower === 'no' ||
-    lower === 'no allergies' ||
-    lower === 'denies' ||
-    lower === 'nil' ||
-    lower === 'not documented' ||
-    lower === 'not documented.' ||
-    lower === 'no known allergies' ||
-    lower === 'nkda'
-  ) {
+  const cleaned = lower.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Explicit negative / non-allergy statements (NKDA, denials, none)
+  const noAllergyPhrases = new Set([
+    'none',
+    'none reported',
+    'none known',
+    'n/a',
+    'na',
+    'no',
+    'nil',
+    'no allergies',
+    'no known allergies',
+    'no known drug allergies',
+    'no known drug allergy',
+    'no drug allergies',
+    'no drug allergy',
+    'denies',
+    'denies allergies',
+    'not documented',
+    'not documented.',
+    'nkda',
+  ]);
+
+  if (noAllergyPhrases.has(lower) || noAllergyPhrases.has(cleaned)) {
+    return false;
+  }
+  if (cleaned.split(' ').includes('nkda') || lower.includes('nkda')) {
+    return false;
+  }
+  if (lower.includes('no known')) {
+    return false;
+  }
+  if (lower.startsWith('no ') && lower.includes('allerg')) {
+    return false;
+  }
+  if (lower.startsWith('none') && (lower.includes('allerg') || lower.includes('known'))) {
     return false;
   }
 
@@ -1630,7 +1654,20 @@ function TranscriptTab({
         )}
 
         <div className="pt-2 flex justify-end">
-          <Button onClick={onProcessed} size="sm" variant="secondary">
+          <Button
+            onClick={async () => {
+              if (hasUnsavedChanges && !saving && consultation?.id && text.trim()) {
+                try {
+                  await handleSave();
+                } catch {
+                  return;
+                }
+              }
+              onProcessed();
+            }}
+            size="sm"
+            variant="secondary"
+          >
             Next: Review SOAP Note →
           </Button>
         </div>
@@ -1697,6 +1734,19 @@ function SOAPTab({ consultation, onConsultationUpdated, onGoToTranscript, onGoTo
     if (!hasExtraction) {
       setError('Clinical information must be extracted before generating a SOAP draft. Please extract clinical information in the Transcript tab first.');
       return;
+    }
+
+    if (hasDraft) {
+      const isEdited = hasUnsavedChanges || Boolean(
+        consultation?.soap_draft?.updated_at &&
+        consultation?.soap_draft?.generated_at &&
+        new Date(consultation.soap_draft.updated_at).getTime() > new Date(consultation.soap_draft.generated_at).getTime()
+      );
+      if (isEdited) {
+        if (!window.confirm('This SOAP draft contains doctor edits. Regenerating will overwrite your custom changes with a fresh AI draft. Are you sure you want to proceed?')) {
+          return;
+        }
+      }
     }
 
     try {
@@ -2080,7 +2130,19 @@ function SOAPTab({ consultation, onConsultationUpdated, onGoToTranscript, onGoTo
                 ← Back to Transcript
               </Button>
               {onGoToVerification && (
-                <Button onClick={onGoToVerification} size="sm">
+                <Button
+                  onClick={async () => {
+                    if (hasUnsavedChanges && !saving && consultation?.id) {
+                      try {
+                        await handleSave();
+                      } catch {
+                        return;
+                      }
+                    }
+                    onGoToVerification();
+                  }}
+                  size="sm"
+                >
                   Next: Verify Claims & Conflicts →
                 </Button>
               )}
@@ -2179,9 +2241,14 @@ function VerificationTab({
 
   const handleResolve = async (itemId: string) => {
     if (!consultation?.id) return;
-    const text = resolutionText[itemId]?.trim() || 'Clinician confirmed and resolved discrepancy with patient.';
+    const text = (resolutionText[itemId] || '').trim();
+    if (!text) {
+      setError('Please enter a clinical resolution note before confirming resolution.');
+      return;
+    }
     try {
       setResolvingId(itemId);
+      setError(null);
       const updated = await api.resolveDiscrepancy(consultation.id, itemId, text);
       onConsultationUpdated(updated);
       setSuccess('Discrepancy resolved.');
@@ -2435,7 +2502,7 @@ function VerificationTab({
                         <Button
                           size="sm"
                           onClick={() => handleResolve(item.id)}
-                          disabled={resolvingId === item.id}
+                          disabled={resolvingId === item.id || !(resolutionText[item.id] || '').trim()}
                         >
                           {resolvingId === item.id ? 'Saving…' : 'Confirm Resolution'}
                         </Button>
