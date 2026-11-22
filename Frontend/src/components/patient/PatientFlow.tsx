@@ -84,6 +84,7 @@ export interface ReturningPatient {
   mrn?: string;
   name: string;
   dob?: string;
+  gender?: string;
   phone?: string;
 }
 
@@ -135,6 +136,7 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
   // Step 1: Pre-fill demographics only if returning patient
   const [name, setName] = useState(initialPatient?.name || '');
   const [dob, setDob] = useState(initialPatient?.dob || '');
+  const [gender, setGender] = useState(initialPatient?.gender || '');
   const [phone, setPhone] = useState(initialPatient?.phone || '');
   const [nameError, setNameError] = useState('');
   const [dobError, setDobError] = useState('');
@@ -332,6 +334,7 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
       api.saveDraft(sessionToken, {
         name: name.trim(),
         dob,
+        gender: gender || undefined,
         phone,
         selected_complaints: getEffectiveComplaints(),
         duration,
@@ -363,6 +366,7 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
       api.saveDraft(sessionToken, {
         name: name.trim(),
         dob,
+        gender: gender || undefined,
         phone,
         selected_complaints: getEffectiveComplaints(),
         duration,
@@ -410,6 +414,7 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
         mrn: initialPatient?.mrn,
         name: name.trim(),
         dob: dob || undefined,
+        gender: gender || undefined,
         phone: phone || undefined,
         selected_complaints: getEffectiveComplaints(),
         duration,
@@ -503,6 +508,27 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
             <div className="flex flex-col gap-4">
               <Input label={t.fullNameLabel} placeholder={t.fullNamePlaceholder} value={name} onChange={setName} error={nameError} required />
               <Input label={t.dobLabel} type="date" value={dob} onChange={v => { setDob(v); setDobError(''); }} placeholder="" max={todayStr} error={dobError} />
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 font-mono-label">
+                  {t.genderLabel}
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {['Male', 'Female', 'Non-binary', 'Other', 'Prefer not to say'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setGender(gender === opt ? '' : opt)}
+                      className={`px-3 py-2 rounded-lg text-xs font-medium border text-left transition-all ${
+                        gender === opt
+                          ? 'bg-blue-50 border-blue-600 text-blue-700 ring-1 ring-blue-600'
+                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {t.genderOptions[opt] || opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <Input label={t.phoneLabel} placeholder={t.phonePlaceholder} value={phone} onChange={v => { setPhone(v); setPhoneError(''); }} type="tel" error={phoneError} />
             </div>
             <div className="mt-6 flex justify-end">
@@ -750,6 +776,7 @@ export default function PatientFlow({ onComplete, initialPatient }: PatientFlowP
                 {[
                   { label: t.reviewLabels.name, value: name || '—' },
                   { label: t.reviewLabels.dob, value: dob || '—' },
+                  { label: t.reviewLabels.gender, value: gender ? (t.genderOptions[gender] || gender) : '—' },
                   { label: t.reviewLabels.phone, value: phone || '—' },
                   { label: t.reviewLabels.complaint, value: getEffectiveComplaints().map(c => t.complaintLabels[c] || c).join(', ') || '—' },
                   { label: t.reviewLabels.duration, value: t.durationOptions[duration] || duration },

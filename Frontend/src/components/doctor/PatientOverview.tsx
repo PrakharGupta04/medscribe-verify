@@ -280,7 +280,7 @@ export default function PatientOverview({ onBack, patientId, sessionId, doctorNa
     age: '—',
     dob: '—',
     phone: '—',
-    gender: 'Not specified',
+    gender: 'Not documented',
   };
 
   const previousVisits = visits.filter(v => v.id !== consultation?.id);
@@ -359,7 +359,7 @@ export default function PatientOverview({ onBack, patientId, sessionId, doctorNa
                 </span>
               </div>
               <div className="flex items-center gap-3 mt-0.5">
-                <span className="text-sm text-slate-500">Age {patient.age} · {patient.gender} · DOB {patient.dob}</span>
+                <span className="text-sm text-slate-500">Age {patient.age} · {patient.gender && patient.gender !== 'Not specified' ? patient.gender : 'Not documented'} · DOB {patient.dob}</span>
                 <span className="text-slate-300">|</span>
                 <span className="text-xs text-slate-400 font-mono-label">{patient.mrn}</span>
                 {hasAllergy && <AllergyTag substance={allergyDisplay} />}
@@ -2590,14 +2590,22 @@ function RecordTab({
   const compItems = consultation?.comparison_results?.items || [];
 
   const confirmedAllergies = useMemo(() => {
-    const list: { substance: string; reaction: string; source: 'patient-reported' | 'doctor-confirmed'; firstSeen?: string }[] = [];
+    const list: { substance: string; reaction: string; source: 'patient-reported' | 'doctor-confirmed' | 'needs-confirmation' | 'ai-generated'; firstSeen?: string }[] = [];
     if (consultation?.extracted_clinical_data?.allergies) {
       for (const a of consultation.extracted_clinical_data.allergies) {
         if (isClinicalAllergy(a.substance)) {
+          // An allergy is only doctor-confirmed if explicitly confirmed in discrepancy resolutions
+          const hasDoctorConfirmation = Boolean(
+            consultation.comparison_results?.items?.some(it =>
+              it.category === 'allergies' &&
+              it.consultation_value?.toLowerCase().includes(a.substance.toLowerCase()) &&
+              it.resolution && !it.discrepancy
+            )
+          );
           list.push({
             substance: a.substance,
             reaction: a.reaction || 'Explicitly reported allergy',
-            source: 'doctor-confirmed',
+            source: hasDoctorConfirmation ? 'doctor-confirmed' : 'needs-confirmation',
             firstSeen: formatVisitDate(consultation.created_at),
           });
         }
@@ -2656,7 +2664,7 @@ function RecordTab({
       for (const m of consultation.extracted_clinical_data.medications) {
         const drug = `${m.name} ${m.dose || ''} ${m.frequency || ''}`.trim();
         const date = formatVisitDate(consultation.created_at);
-        const status = m.status || 'Active';
+        const status = m.status || 'Not documented';
         if (isDoctorPrescribed(m.name)) {
           rxList.push({ drug, date, status, source: 'doctor-confirmed' });
         } else {
@@ -2717,7 +2725,7 @@ function RecordTab({
     if (allergiesSet.size > 0) {
       result.push({
         category: 'Allergies',
-        facts: Array.from(allergiesSet).map(f => ({ fact: f, sources: ['doctor-confirmed'] as const, date: 'Documented across visits' }))
+        facts: Array.from(allergiesSet).map(f => ({ fact: f, sources: ['needs-confirmation'] as const, date: 'Documented across visits' }))
       });
     }
     if (diagnosesSet.size > 0) {

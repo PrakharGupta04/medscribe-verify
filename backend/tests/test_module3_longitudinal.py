@@ -28,6 +28,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from backend.app.db.base import Base
 from backend.app.db.models import Consultation, IntakeData, IntakeSession, Patient
@@ -47,6 +48,7 @@ def engine():
     _engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=_engine)
     yield _engine
@@ -920,3 +922,229 @@ def test_two_visit_record_pdf_single_page_pagination(db_session):
     assert pages == 1, (
         f"Expected 2-visit patient PDF to fit cleanly on 1 page without an empty trailing page, got {pages}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests: Gender field data flow and backward compatibility
+# ---------------------------------------------------------------------------
+
+def test_intake_submit_with_gender_persists_and_retrieves(db_session, client):
+    """
+    Verify gender field persists across intake submission, patient record,
+    doctor intake summary, and longitudinal patient record.
+    Tests canonical options: Male, Female, Non-binary, Other, Prefer not to say.
+    """
+    from backend.app.services.record_service import get_patient_longitudinal_record
+    from backend.app.services import queue_service
+
+    for test_gender in ["Male", "Female", "Non-binary", "Other", "Prefer not to say"]:
+        # 1. Create intake session
+        create_res = client.post("/api/intake/sessions")
+        assert create_res.status_code == 201
+        token = create_res.json()["session_token"]
+
+        # 2. Submit intake with gender
+        submit_payload = {
+            "name": f"Gender Test Patient {test_gender}",
+            "dob": "1995-05-15",
+            "gender": test_gender,
+            "phone": "+91 98765 43210",
+            "selected_complaints": ["Fever"],
+            "duration": "1–2 days",
+            "severity": 5,
+            "conditions": ["None of the above"],
+            "medications": "None",
+            "allergies": "None reported",
+        }
+        sub_res = client.post(f"/api/intake/sessions/{token}/submit", json=submit_payload)
+        assert sub_res.status_code == 200, sub_res.text
+        data = sub_res.json()
+        pid = data["patient_id"]
+        assert data["summary"]["gender"] == test_gender
+
+        # 3. Verify Patient database record
+        p = db_session.query(Patient).filter(Patient.id == pid).first()
+        assert p is not None
+        assert p.gender == test_gender
+
+        # 4. Verify Doctor Intake Summary API
+        doc_intake = queue_service.get_doctor_intake(db_session, pid)
+        assert doc_intake.patient.gender == test_gender
+
+        # 5. Verify Longitudinal Record service
+        record = get_patient_longitudinal_record(db_session, pid)
+        assert record["patient"]["gender"] == test_gender
+
+
+def test_intake_submit_without_gender_defaults_to_not_documented(db_session, client):
+    """
+    Ensure existing and new records without an explicit gender value remain valid
+    and display the neutral value 'Not documented', never inventing or defaulting to Male/Female.
+    """
+    from backend.app.services.record_service import get_patient_longitudinal_record
+    from backend.app.services import queue_service
+
+    # Create session
+    create_res = client.post("/api/intake/sessions")
+    assert create_res.status_code == 201
+    token = create_res.json()["session_token"]
+
+    # Submit without gender field
+    submit_payload = {
+        "name": "No Gender Patient",
+        "dob": "1992-03-20",
+        "phone": "+91 98765 43211",
+        "selected_complaints": ["Headache"],
+        "duration": "3–5 days",
+        "severity": 4,
+        "conditions": ["None of the above"],
+        "medications": "None",
+        "allergies": "None reported",
+    }
+    sub_res = client.post(f"/api/intake/sessions/{token}/submit", json=submit_payload)
+    assert sub_res.status_code == 200
+    pid = sub_res.json()["patient_id"]
+
+    # Verify Patient DB record has neutral 'Not documented'
+    p = db_session.query(Patient).filter(Patient.id == pid).first()
+    assert p.gender == "Not documented"
+
+    # Verify Doctor Intake summary returns 'Not documented'
+    doc_intake = queue_service.get_doctor_intake(db_session, pid)
+    assert doc_intake.patient.gender == "Not documented"
+
+    # Verify Longitudinal record returns 'Not documented'
+    record = get_patient_longitudinal_record(db_session, pid)
+    assert record["patient"]["gender"] == "Not documented"
+
+    # Backward compatibility: legacy patient with gender=None or 'Not specified'
+    legacy_p = _make_patient(db_session, name="Legacy Patient", mrn=None)
+    legacy_p.gender = "Not specified"
+    db_session.commit()
+    legacy_record = get_patient_longitudinal_record(db_session, legacy_p.id)
+    assert legacy_record["patient"]["gender"] == "Not documented"
+
+    legacy_p.gender = None
+    db_session.commit()
+    legacy_record_none = get_patient_longitudinal_record(db_session, legacy_p.id)
+    assert legacy_record_none["patient"]["gender"] == "Not documented"
+
+
+# ---------------------------------------------------------------------------
+# Tests: PDF SOAP table wrapping with long clinical text
+# ---------------------------------------------------------------------------
+
+def test_pdf_soap_table_wraps_long_clinical_text_without_clipping(db_session):
+    """
+    Ensure extremely long clinical text across all SOAP sections wraps cleanly
+    inside Table cells using Paragraph flowables, without throwing layout errors,
+    clipping text, or overflowing past page boundaries.
+    """
+    from backend.app.services.record_service import generate_patient_pdf
+
+    p = _make_patient(db_session, name="Long Clinical Text Patient")
+    s = _make_session(db_session, p.id)
+    _make_intake(db_session, s.id, p.id, "Severe multi-system symptoms")
+
+    long_subjective = (
+        "Patient presents with severe throbbing bilateral frontal headaches radiating to the occipital region "
+        "and posterior cervical spine for the past 7 days, accompanied by intermittent low-grade pyrexia, "
+        "photophobia, phonophobia, nausea, and general malaise. Reports taking paracetamol 1000 mg three times "
+        "daily with minimal relief. Denies neck stiffness, visual aura, loss of consciousness, or focal neurological deficits."
+    )
+    long_objective = (
+        "Alert and oriented x3. Temperature 37.8 C, BP 128/82 mmHg, HR 78 bpm regular, RR 16/min, SpO2 99% on room air. "
+        "HEENT: Pupils equal, round, reactive to light and accommodation. No conjunctival pallor or scleral icterus. "
+        "Fundoscopic exam unremarkable. Oropharynx clear without exudate. Neck supple, negative Kernig and Brudzinski signs. "
+        "Cranial nerves II-XII grossly intact. No focal motor or sensory deficits noted on cerebellar testing."
+    )
+    long_assessment = (
+        "Acute tension-type headache with possible viral cephalalgia. Differential diagnosis includes cervicogenic headache, "
+        "sinusitis, and migraine without aura. Meningeal signs negative, intracranial pathology currently low probability."
+    )
+    long_plan = (
+        "1. Transition from paracetamol monotherapy to combination analgesia as needed with food. "
+        "2. Encourage oral hydration (2.5L daily), dark room rest, and structured sleep hygiene. "
+        "3. Provide strict red-flag return instructions: sudden thunderclap onset, persistent vomiting, high fever, or confusion. "
+        "4. Follow up in clinic in 5 days if headaches persist or worsen."
+    )
+
+    c = _make_consultation(db_session, p.id, s.id, status="completed", with_final=True)
+    c.final_record = json.dumps({
+        "doctor_name": "Dr. Sarah Jenkins",
+        "doctor_notes": "Reviewed and discussed danger signs with patient.",
+        "soap": {
+            "subjective": long_subjective,
+            "objective": long_objective,
+            "assessment": long_assessment,
+            "plan": long_plan,
+        },
+    })
+    c.extracted_clinical_data = json.dumps({
+        "symptoms": [{"name": "Headache", "duration": "7 days"}, {"name": "Photophobia"}, {"name": "Nausea"}],
+        "medications": [{"name": "Paracetamol", "dose": "1000 mg", "frequency": "three times daily", "status": "active"}],
+        "allergies": [],
+        "diagnoses": ["Tension-type headache", "Viral cephalalgia"],
+    })
+    db_session.commit()
+
+    pdf_bytes = generate_patient_pdf(db_session, p.id)
+    assert pdf_bytes.startswith(b"%PDF"), "Must be a valid PDF"
+    assert len(pdf_bytes) > 2000, "PDF must contain substantial rendered content"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Hinglish clinical dialogue extraction and SOAP preservation
+# ---------------------------------------------------------------------------
+
+def test_hinglish_voice_pipeline_extraction_and_soap_preservation():
+    """
+    Validate that clinical extraction and SOAP generation correctly process
+    a Hindi-English mixed (Hinglish) consultation transcript, preserving symptoms,
+    duration, medication details, and negative findings without hallucinating allergies.
+    """
+    from backend.app.services.extraction_service import extract_clinical_facts_groq
+    from backend.app.services.soap_service import generate_soap_draft_groq
+
+    hinglish_transcript = (
+        "Doctor: Namaste, aapko kya takleef ho rahi hai?\n"
+        "Patient: Doctor sahib, mujhe 3 din se bahut tezz bukhar (fever) hai aur headache hai.\n"
+        "Doctor: Kya koi dawai li aapne?\n"
+        "Patient: Haan, main paracetamol 500mg le raha hoon twice daily, par aaram nahi hai.\n"
+        "Doctor: Koi allergy hai kisi dawai se?\n"
+        "Patient: Nahi, koi allergy nahi hai. Aur koi breathing problem bhi nahi hai."
+    )
+
+    extracted = extract_clinical_facts_groq(hinglish_transcript)
+    assert extracted is not None
+
+    # Symptoms: Fever (3 days) and Headache must be captured
+    symptom_names = [s.name.lower() for s in extracted.symptoms]
+    assert any("fever" in s for s in symptom_names), f"Fever must be extracted from Hinglish, got {symptom_names}"
+    assert any("headache" in s for s in symptom_names), f"Headache must be extracted from Hinglish, got {symptom_names}"
+
+    # Duration: 3 days on Fever
+    fever_sym = next((s for s in extracted.symptoms if "fever" in s.name.lower()), None)
+    assert fever_sym is not None
+    assert fever_sym.duration is not None and "3" in fever_sym.duration
+
+    # Medication: Paracetamol 500mg twice daily
+    assert len(extracted.medications) >= 1
+    para_med = next((m for m in extracted.medications if "paracetamol" in m.name.lower()), None)
+    assert para_med is not None
+    assert para_med.dose is not None and "500" in para_med.dose
+
+    # Allergies: No false allergies extracted
+    assert len(extracted.allergies) == 0, f"Expected 0 allergies, got {extracted.allergies}"
+
+    # Negative findings: No drug allergies and no breathing problems
+    neg_lower = [n.lower() for n in extracted.negative_findings]
+    assert any("allerg" in n for n in neg_lower), f"Expected negative allergy finding, got {neg_lower}"
+
+    # SOAP Draft generation
+    soap = generate_soap_draft_groq(hinglish_transcript, extracted)
+    assert soap is not None
+    subj_lower = soap.subjective.lower()
+    assert "fever" in subj_lower
+    assert "headache" in subj_lower
+    assert "paracetamol" in subj_lower

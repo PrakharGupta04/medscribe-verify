@@ -10,7 +10,7 @@ class PatientDemographics(BaseModel):
     age: Optional[str] = "—"
     dob: Optional[str] = "—"
     phone: Optional[str] = "—"
-    gender: str = "Not specified"
+    gender: str = "Not documented"
 
 
 class PreConsultationSummary(BaseModel):

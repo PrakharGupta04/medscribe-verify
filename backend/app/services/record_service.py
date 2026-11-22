@@ -263,7 +263,7 @@ def get_patient_longitudinal_record(db: Session, patient_id: str) -> Dict[str, A
             "name": patient.name,
             "dob": patient.dob or "Not documented",
             "phone": patient.phone or "Not documented",
-            "gender": patient.gender or "Not specified",
+            "gender": patient.gender if (patient.gender and patient.gender not in ("Not specified", "Not documented", "")) else "Not documented",
         },
         "intake_summary": {
             "chief_complaint": intake.chief_complaint if intake else "Not documented",
@@ -400,6 +400,36 @@ def generate_patient_pdf(db: Session, patient_id: str) -> bytes:
         spaceBefore=4,
         leading=12,
     )
+    demo_label_style = ParagraphStyle(
+        "DemoLabelCell",
+        parent=styles["Normal"],
+        fontSize=8.5,
+        leading=11,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#475569"),
+    )
+    demo_val_style = ParagraphStyle(
+        "DemoValCell",
+        parent=styles["Normal"],
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor("#1e293b"),
+    )
+    soap_header_style = ParagraphStyle(
+        "SoapHeaderCell",
+        parent=styles["Normal"],
+        fontSize=7.5,
+        leading=10,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#475569"),
+    )
+    soap_body_style = ParagraphStyle(
+        "SoapBodyCell",
+        parent=styles["Normal"],
+        fontSize=7.5,
+        leading=10,
+        textColor=colors.HexColor("#1e293b"),
+    )
 
     story = []
     patient = record["patient"]
@@ -432,24 +462,34 @@ def generate_patient_pdf(db: Session, patient_id: str) -> bytes:
     # ----- Patient Demographics -----
     story.append(Paragraph("Patient Demographics", section_heading_style))
     demo_data = [
-        ["Name", _esc(patient["name"]), "MRN", _esc(patient["mrn"])],
-        ["Date of Birth", _esc(patient["dob"]), "Gender", _esc(patient["gender"])],
-        ["Phone", _esc(patient["phone"]), "", ""],
+        [
+            Paragraph("Name", demo_label_style),
+            Paragraph(_esc(patient["name"]), demo_val_style),
+            Paragraph("MRN", demo_label_style),
+            Paragraph(_esc(patient["mrn"]), demo_val_style),
+        ],
+        [
+            Paragraph("Date of Birth", demo_label_style),
+            Paragraph(_esc(patient["dob"]), demo_val_style),
+            Paragraph("Gender", demo_label_style),
+            Paragraph(_esc(patient["gender"]), demo_val_style),
+        ],
+        [
+            Paragraph("Phone", demo_label_style),
+            Paragraph(_esc(patient["phone"]), demo_val_style),
+            Paragraph("", demo_label_style),
+            Paragraph("", demo_val_style),
+        ],
     ]
-    demo_table = Table(demo_data, colWidths=[3 * cm, 7 * cm, 3 * cm, 4 * cm])
+    demo_table = Table(demo_data, colWidths=[2.8 * cm, 6.8 * cm, 2.8 * cm, 5.6 * cm])
     demo_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#475569")),
-        ("TEXTCOLOR", (2, 0), (2, -1), colors.HexColor("#475569")),
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
         ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
     ]))
     story.append(demo_table)
     story.append(Spacer(1, 3))
@@ -511,24 +551,20 @@ def generate_patient_pdf(db: Session, patient_id: str) -> bytes:
                     draft_label_style,
                 ))
             soap_data = [
-                ["Subjective", _esc(soap["subjective"])],
-                ["Objective", _esc(soap["objective"])],
-                ["Assessment", _esc(soap["assessment"])],
-                ["Plan", _esc(soap["plan"])],
+                [Paragraph("Subjective", soap_header_style), Paragraph(_esc(soap["subjective"]), soap_body_style)],
+                [Paragraph("Objective", soap_header_style), Paragraph(_esc(soap["objective"]), soap_body_style)],
+                [Paragraph("Assessment", soap_header_style), Paragraph(_esc(soap["assessment"]), soap_body_style)],
+                [Paragraph("Plan", soap_header_style), Paragraph(_esc(soap["plan"]), soap_body_style)],
             ]
-            soap_table = Table(soap_data, colWidths=[3 * cm, 15.3 * cm])
+            soap_table = Table(soap_data, colWidths=[2.8 * cm, 15.2 * cm])
             soap_table.setStyle(TableStyle([
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-                ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#475569")),
-                ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#1e293b")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
                 ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
                 ("TOPPADDING", (0, 0), (-1, -1), 2),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ]))
             story.append(soap_table)
         else:

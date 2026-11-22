@@ -10,6 +10,7 @@ export interface IntakeDraftData {
   mrn?: string;
   name?: string;
   dob?: string;
+  gender?: string;
   phone?: string;
   selected_complaints: string[];
   duration?: string;
@@ -37,6 +38,7 @@ export interface IntakeSubmitRequest {
   mrn?: string;
   name: string;
   dob?: string;
+  gender?: string;
   phone?: string;
   selected_complaints: string[];
   duration: string;

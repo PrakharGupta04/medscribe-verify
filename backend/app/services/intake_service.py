@@ -151,6 +151,8 @@ def submit_intake(
             .first()
         )
 
+    submitted_gender = req.gender.strip() if req.gender and req.gender.strip() else None
+
     if not patient:
         mrn = generate_next_mrn(db)
         patient = Patient(
@@ -158,7 +160,7 @@ def submit_intake(
             name=req.name.strip(),
             dob=req.dob.strip() if req.dob else None,
             phone=req.phone.strip() if req.phone else None,
-            gender="Not specified",
+            gender=submitted_gender or "Not documented",
             created_at=now,
             updated_at=now,
         )
@@ -170,6 +172,8 @@ def submit_intake(
             patient.dob = req.dob.strip()
         if req.phone and not patient.phone:
             patient.phone = req.phone.strip()
+        if submitted_gender:
+            patient.gender = submitted_gender
         db.flush()
 
     # Link session to patient
@@ -248,6 +252,7 @@ def submit_intake(
         symptoms=all_symptoms,
         duration=req.duration,
         severity=req.severity,
+        gender=patient.gender or "Not documented",
         conditions=req.conditions,
         condition_details=req.condition_details or {},
         medications=clean_medications or "None",

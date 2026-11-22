@@ -210,7 +210,7 @@ def build_pre_consult_summary(
         age=calculate_age(patient.dob),
         dob=patient.dob or "—",
         phone=patient.phone or "—",
-        gender=patient.gender or "Not specified",
+        gender=patient.gender if (patient.gender and patient.gender not in ("Not specified", "Not documented", "")) else "Not documented",
     )
 
     # Detect if normalization fallback was triggered or if untranslated Hindi/Hinglish remains

@@ -4,6 +4,28 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+VALID_GENDER_MAP = {
+    "male": "Male",
+    "female": "Female",
+    "non-binary": "Non-binary",
+    "non binary": "Non-binary",
+    "other": "Other",
+    "prefer not to say": "Prefer not to say",
+}
+
+
+def _validate_gender_value(v: Optional[str]) -> str:
+    if not v or not v.strip():
+        return ""
+    trimmed = v.strip()
+    normalized = VALID_GENDER_MAP.get(trimmed.lower())
+    if not normalized:
+        raise ValueError(
+            "Invalid gender. Supported options are: Male, Female, Non-binary, Other, Prefer not to say."
+        )
+    return normalized
+
+
 class SessionCreateResponse(BaseModel):
     session_token: str
     status: str
@@ -16,6 +38,7 @@ class IntakeDraftData(BaseModel):
     mrn: Optional[str] = None
     name: Optional[str] = ""
     dob: Optional[str] = ""
+    gender: Optional[str] = ""
     phone: Optional[str] = ""
     selected_complaints: List[str] = Field(default_factory=list)
     duration: Optional[str] = "3–5 days"
@@ -27,6 +50,11 @@ class IntakeDraftData(BaseModel):
     medications: Optional[str] = ""
     allergies: Optional[str] = ""
     additional_notes: Optional[str] = ""
+
+    @field_validator("gender")
+    @classmethod
+    def validate_gender(cls, v: Optional[str]) -> str:
+        return _validate_gender_value(v)
 
 
 class IntakeSessionDetailResponse(BaseModel):
@@ -43,6 +71,7 @@ class IntakeSubmitRequest(BaseModel):
     mrn: Optional[str] = Field(None, description="Existing MRN for returning patient")
     name: str = Field(..., min_length=1, description="Patient full name is required")
     dob: Optional[str] = ""
+    gender: Optional[str] = ""
     phone: Optional[str] = ""
     selected_complaints: List[str] = Field(..., min_length=1, description="At least one chief complaint must be selected")
     duration: str = Field(..., min_length=1, description="Symptom duration is required")
@@ -99,12 +128,18 @@ class IntakeSubmitRequest(BaseModel):
             raise ValueError("Phone number must be a valid 10-digit mobile number.")
         return cleaned
 
+    @field_validator("gender")
+    @classmethod
+    def validate_gender(cls, v: Optional[str]) -> str:
+        return _validate_gender_value(v)
+
 
 class IntakeSubmitSummary(BaseModel):
     chief_complaint: str
     symptoms: List[str]
     duration: str
     severity: int
+    gender: Optional[str] = "Not documented"
     conditions: List[str]
     condition_details: Dict[str, Dict[str, str]] = Field(default_factory=dict)
     medications: str

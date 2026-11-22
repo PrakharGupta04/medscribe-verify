@@ -19,6 +19,9 @@ export interface LocalizationDictionary {
   fullNameLabel: string;
   fullNamePlaceholder: string;
   dobLabel: string;
+  genderLabel: string;
+  genderPlaceholder: string;
+  genderOptions: Record<string, string>;
   phoneLabel: string;
   phonePlaceholder: string;
   nameError: string;
@@ -58,6 +61,7 @@ export interface LocalizationDictionary {
   reviewLabels: {
     name: string;
     dob: string;
+    gender: string;
     phone: string;
     complaint: string;
     duration: string;
@@ -102,6 +106,15 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNameLabel: 'Full name',
     fullNamePlaceholder: 'e.g. Sarah Miller',
     dobLabel: 'Date of birth',
+    genderLabel: 'Gender',
+    genderPlaceholder: 'Select gender',
+    genderOptions: {
+      'Male': 'Male',
+      'Female': 'Female',
+      'Non-binary': 'Non-binary',
+      'Other': 'Other',
+      'Prefer not to say': 'Prefer not to say',
+    },
     phoneLabel: 'Phone number (optional)',
     phonePlaceholder: '+91 98765 43210',
     nameError: 'Please enter your name.',
@@ -225,6 +238,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     reviewLabels: {
       name: 'Name',
       dob: 'Date of Birth',
+      gender: 'Gender',
       phone: 'Phone',
       complaint: 'Chief Complaint',
       duration: 'Duration',
@@ -270,6 +284,15 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNameLabel: 'पूरा नाम',
     fullNamePlaceholder: 'उदा. राहुल शर्मा',
     dobLabel: 'जन्म तिथि',
+    genderLabel: 'लिंग (Gender)',
+    genderPlaceholder: 'लिंग चुनें',
+    genderOptions: {
+      'Male': 'पुरुष (Male)',
+      'Female': 'महिला (Female)',
+      'Non-binary': 'नॉन-बाइनरी (Non-binary)',
+      'Other': 'अन्य (Other)',
+      'Prefer not to say': 'बताना नहीं चाहते (Prefer not to say)',
+    },
     phoneLabel: 'फ़ोन नंबर (वैकल्पिक)',
     phonePlaceholder: '+91 98765 43210',
     nameError: 'कृपया अपना नाम दर्ज करें।',
@@ -393,6 +416,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     reviewLabels: {
       name: 'नाम',
       dob: 'जन्म तिथि',
+      gender: 'लिंग (Gender)',
       phone: 'फ़ोन नंबर',
       complaint: 'मुख्य समस्या',
       duration: 'अवधि',
@@ -438,6 +462,15 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     fullNameLabel: 'Full name (Pura naam)',
     fullNamePlaceholder: 'Jaise: Rahul Sharma',
     dobLabel: 'Date of birth (Janam tithi)',
+    genderLabel: 'Gender (Ling)',
+    genderPlaceholder: 'Select gender karein',
+    genderOptions: {
+      'Male': 'Male (Purush)',
+      'Female': 'Female (Mahila)',
+      'Non-binary': 'Non-binary',
+      'Other': 'Other (Anya)',
+      'Prefer not to say': 'Batana nahi chahte (Prefer not to say)',
+    },
     phoneLabel: 'Phone number (Optional)',
     phonePlaceholder: '+91 98765 43210',
     nameError: 'Kripya apna naam enter karein.',
@@ -561,6 +594,7 @@ export const LOCALIZATION: Record<PatientLang, LocalizationDictionary> = {
     reviewLabels: {
       name: 'Naam',
       dob: 'Date of Birth',
+      gender: 'Gender (Ling)',
       phone: 'Phone',
       complaint: 'Mukhya Complaint',
       duration: 'Kitne din se',
