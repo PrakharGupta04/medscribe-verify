@@ -2556,10 +2556,34 @@ function RecordTab({
   });
   const [doctorNotes, setDoctorNotes] = useState('');
   const [recordTab, setRecordTab] = useState('overview');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const allChecked = Object.values(checklist).every(Boolean);
 
   const toggle = (key: keyof typeof checklist) => {
     setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleDownloadPdf = async () => {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    setPdfError(null);
+    try {
+      const blob = await api.downloadPatientRecordPdf(patient.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `medscribe-${patient.mrn || patient.id}-record.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'PDF download failed.';
+      setPdfError(msg);
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const claims = consultation?.verification_results?.claims || [];
@@ -3033,14 +3057,44 @@ function RecordTab({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">Source-annotated longitudinal view of confirmed facts across all visits for this patient.</p>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border ${
-                isCurrentVisitFinalized
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
-              }`}>
-                {isCurrentVisitFinalized ? 'Doctor-Approved Final Record' : 'Active Consultation · Draft State'}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border ${
+                  isCurrentVisitFinalized
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  {isCurrentVisitFinalized ? 'Doctor-Approved Final Record' : 'Active Consultation · Draft State'}
+                </span>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={pdfLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
+                  title="Download complete patient longitudinal record as PDF"
+                >
+                  {pdfLoading ? (
+                    <>
+                      <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Generating PDF…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download Patient Record (PDF)
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+            {pdfError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                PDF download failed: {pdfError}
+              </div>
+            )}
 
             {!isCurrentVisitFinalized && (
               <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">

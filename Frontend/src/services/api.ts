@@ -264,6 +264,39 @@ export const api = {
     });
   },
 
+  /**
+   * Download the longitudinal patient record as a PDF blob.
+   * Uses a raw fetch (not the JSON request helper) because the response is binary.
+   */
+  async downloadPatientRecordPdf(patientId: string): Promise<Blob> {
+    const url = `${API_BASE_URL}/patients/${patientId}/record/pdf`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/pdf' },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Network error';
+      throw new Error(
+        `Unable to connect to Medscribe server (${message}). Ensure the backend is running.`
+      );
+    }
+    if (!response.ok) {
+      let errorDetail = `PDF request failed with status ${response.status}`;
+      try {
+        const errorJson = await response.json();
+        if (errorJson.detail && typeof errorJson.detail === 'string') {
+          errorDetail = errorJson.detail;
+        }
+      } catch {
+        // Ignore JSON parse error on non-json error responses
+      }
+      throw new Error(errorDetail);
+    }
+    return response.blob();
+  },
+
   /** Transcribe audio recording into text for free-text review/editing */
   async transcribeAudio(
     blob: Blob,
